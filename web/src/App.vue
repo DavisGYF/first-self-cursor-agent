@@ -40,6 +40,7 @@
       </button>
     </div>
     <p v-if="ragStatusText" class="subtitle" style="margin-top: -4px;">{{ ragStatusText }}</p>
+    <p v-if="ragMatchHint" class="subtitle" style="margin-top: -10px;">{{ ragMatchHint }}</p>
 
     <div class="messages">
       <div v-for="(msg, idx) in messages" :key="idx" class="msg" :class="msg.role === 'user' ? 'msg-user' : 'msg-assistant'">
@@ -104,6 +105,7 @@ const useRag = ref(false);
 const selectedFile = ref(null);
 const uploadingFile = ref(false);
 const ragStatusText = ref("");
+const ragMatchHint = ref("");
 
 // 用于中断请求（点击“停止生成”时调用）
 let currentAbortController = null;
@@ -111,6 +113,7 @@ let currentAbortController = null;
 // 新开一个空会话
 function resetChat() {
   messages.value = [];
+  ragMatchHint.value = "";
 }
 
 // 选择上传文件：这里只记录文件对象，实际读取在上传时进行
@@ -164,6 +167,7 @@ async function sendMessage() {
   // 3) 清空输入框，准备请求
   inputText.value = "";
   isGenerating.value = true;
+  ragMatchHint.value = "";
   currentAbortController = new AbortController();
 
   try {
@@ -209,6 +213,12 @@ async function sendMessage() {
           // token 事件就不断追加，让你看到“打字机效果”
           if (event.type === "token" && event.token) {
             assistantMessage.content += event.token;
+          }
+          // rag_status 事件：提示是否命中知识片段
+          if (event.type === "rag_status" && event.enabled) {
+            ragMatchHint.value = event.matched
+              ? `RAG 已命中 ${event.count} 个片段，本次回答会更偏向你的文档。`
+              : "RAG 未命中文档片段，本次回答可能与未开启 RAG 接近。";
           }
           // sources 事件用于展示本次回答参考了哪些文档片段
           if (event.type === "sources" && Array.isArray(event.sources)) {

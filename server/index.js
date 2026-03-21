@@ -15,7 +15,8 @@ app.use(express.json({ limit: "1mb" }));
 
 const PORT = Number(process.env.PORT || 3000);
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
+const OPENAI_BASE_URL =
+  process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
 const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "gpt-4o-mini";
 
 // =========================
@@ -25,12 +26,20 @@ const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "gpt-4o-mini";
 const ragChunks = [];
 let ragDocId = 1;
 
-// 简单分词：转小写后按非字母数字和中文字符切分
+// 分词优化：
+// 1) 英文/数字按词切分
+// 2) 中文额外拆成单字，提升“退款几天到账”这类短问句命中率
 function tokenize(text) {
-  return String(text)
-    .toLowerCase()
+  const normalized = String(text).toLowerCase();
+  // 这个增加分词优化
+  // 我上传本地txt文件里面写了退款时间 用不用RGA回答都一样 问问题他识别不出来 然后这一步优化以后就行了
+  const words = normalized
     .split(/[^\p{L}\p{N}\u4e00-\u9fff]+/u)
     .filter(Boolean);
+
+  const cjkChars = [...normalized].filter((ch) => /[\u4e00-\u9fff]/u.test(ch));
+
+  return [...words, ...cjkChars];
 }
 
 // 把长文本切成多个小块，便于后续做相似度检索
@@ -93,7 +102,7 @@ app.post("/api/rag/upload", (req, res) => {
         docId,
         title: safeTitle,
         chunkIndex: idx + 1,
-        text
+        text,
       });
     });
 
@@ -102,7 +111,7 @@ app.post("/api/rag/upload", (req, res) => {
       docId,
       title: safeTitle,
       chunkCount: chunks.length,
-      totalChunks: ragChunks.length
+      totalChunks: ragChunks.length,
     });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -122,7 +131,7 @@ app.post("/api/rag/query", (req, res) => {
       title: item.title,
       chunkIndex: item.chunkIndex,
       text: item.text,
-      score: item.score
+      score: item.score,
     }));
 
     res.json({ ok: true, query, sources });
@@ -135,18 +144,26 @@ app.post("/api/rag/query", (req, res) => {
 app.post("/api/chat/stream", async (req, res) => {
   try {
     // 请求体可传 model/messages/systemPrompt，不传就走默认值
-    const { model = DEFAULT_MODEL, messages = [], systemPrompt = "", useRag = false } = req.body || {};
+    const {
+      model = DEFAULT_MODEL,
+      messages = [],
+      systemPrompt = "",
+      useRag = false,
+    } = req.body || {};
 
     // 如果没配 key，直接报错并提示如何修复
     if (!OPENAI_API_KEY) {
       return res.status(400).json({
-        error: "Missing OPENAI_API_KEY. Please copy .env.example to .env and fill key."
+        error:
+          "Missing OPENAI_API_KEY. Please copy .env.example to .env and fill key.",
       });
     }
 
     // 找出最后一条用户消息，作为本次 RAG 检索 query
     const latestUserMessage =
-      [...messages].reverse().find((item) => item?.role === "user" && item?.content)?.content || "";
+      [...messages]
+        .reverse()
+        .find((item) => item?.role === "user" && item?.content)?.content || "";
     const sources = useRag ? searchChunks(latestUserMessage, 3) : [];
 
     // 构造发送给模型的消息：系统提示 +（可选）RAG上下文 + 用户历史消息
@@ -159,14 +176,14 @@ app.post("/api/chat/stream", async (req, res) => {
       const ragContext = sources
         .map(
           (item, idx) =>
-            `【资料${idx + 1} | ${item.title}#${item.chunkIndex}】\n${item.text}`
+            `【资料${idx + 1} | ${item.title}#${item.chunkIndex}】\n${item.text}`,
         )
         .join("\n\n");
       finalMessages.push({
         role: "system",
         content:
           "你必须优先根据给定资料回答；若资料不足，请明确说明“资料中未提供完整信息”。\n\n" +
-          ragContext
+          ragContext,
       });
     }
     for (const item of messages) {
@@ -182,6 +199,17 @@ app.post("/api/chat/stream", async (req, res) => {
 
     // 告诉前端：流开始了（可用于显示“模型思考中”）
     res.write(`data: ${JSON.stringify({ type: "start" })}\n\n`);
+    // 告诉前端本次 RAG 命中情况，便于你观察“为什么开关后效果差不多”
+    if (useRag) {
+      res.write(
+        `data: ${JSON.stringify({
+          type: "rag_status",
+          enabled: true,
+          matched: sources.length > 0,
+          count: sources.length,
+        })}\n\n`,
+      );
+    }
     // 如果开启了 RAG，把命中的来源先推给前端，方便页面展示引用
     if (sources.length > 0) {
       res.write(
@@ -191,9 +219,9 @@ app.post("/api/chat/stream", async (req, res) => {
             id: item.id,
             title: item.title,
             chunkIndex: item.chunkIndex,
-            text: item.text
-          }))
-        })}\n\n`
+            text: item.text,
+          })),
+        })}\n\n`,
       );
     }
 
@@ -202,20 +230,24 @@ app.post("/api/chat/stream", async (req, res) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
         model,
         stream: true,
         messages: finalMessages,
-        temperature: 0.7
-      })
+        // 降低温度提高稳定性；限制输出长度可减少等待时间
+        temperature: useRag ? 0.2 : 0.5,
+        max_tokens: 400,
+      }),
     });
 
     // 如果上游接口失败，透传错误，便于你定位问题
     if (!response.ok || !response.body) {
       const errorText = await response.text();
-      res.write(`data: ${JSON.stringify({ type: "error", message: errorText })}\n\n`);
+      res.write(
+        `data: ${JSON.stringify({ type: "error", message: errorText })}\n\n`,
+      );
       res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
       return res.end();
     }
@@ -265,7 +297,9 @@ app.post("/api/chat/stream", async (req, res) => {
     res.end();
   } catch (error) {
     // 统一兜底错误，避免接口挂死
-    res.write(`data: ${JSON.stringify({ type: "error", message: String(error) })}\n\n`);
+    res.write(
+      `data: ${JSON.stringify({ type: "error", message: String(error) })}\n\n`,
+    );
     res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
     res.end();
   }
