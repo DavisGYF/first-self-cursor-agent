@@ -1,0 +1,98 @@
+/* 基础页面样式，先保证观感简洁清晰 */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: #f6f7fb;
+  color: #1f2430;
+}
+
+#app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.panel {
+  background: #fff;
+  border: 1px solid #e6e8ef;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(19, 33, 68, 0.04);
+}
+
+.title {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.subtitle {
+  margin: 0 0 16px;
+  color: #677089;
+  font-size: 14px;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+input,
+select,
+textarea,
+button {
+  font-size: 14px;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid #d9deea;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+}
+
+button {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  background: #2563eb;
+  color: #fff;
+}
+
+button:disabled {
+  background: #9aa8cb;
+  cursor: not-allowed;
+}
+
+.messages {
+  border: 1px solid #e6e8ef;
+  border-radius: 10px;
+  padding: 12px;
+  min-height: 260px;
+  max-height: 460px;
+  overflow: auto;
+  background: #fcfdff;
+}
+
+.msg {
+  margin: 10px 0;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.msg-user {
+  color: #1d4ed8;
+}
+
+.msg-assistant {
+  color: #111827;
+}
