@@ -1,7 +1,7 @@
 <template>
   <div class="panel">
     <h1 class="title">AI Copilot Demo（Vue + Express）</h1>
-    <p class="subtitle">这是你的最小可运行版本：支持对话、流式输出、模型切换、Prompt 模板。</p>
+    <p class="subtitle">这是你的学习版项目：支持对话、流式输出、RAG 上传与引用展示。</p>
 
     <div class="row">
       <select v-model="selectedModel">
@@ -26,9 +26,30 @@
       />
     </div>
 
+    <div class="row" style="align-items: center;">
+      <label style="display: flex; align-items: center; gap: 6px;">
+        <input v-model="useRag" type="checkbox" />
+        启用 RAG（让回答参考你上传的文档）
+      </label>
+    </div>
+
+    <div class="row">
+      <input type="file" accept=".txt,.md,text/plain,text/markdown" @change="onFileChange" />
+      <button :disabled="!selectedFile || uploadingFile" @click="uploadRagFile">
+        {{ uploadingFile ? "上传中..." : "上传知识库文件" }}
+      </button>
+    </div>
+    <p v-if="ragStatusText" class="subtitle" style="margin-top: -4px;">{{ ragStatusText }}</p>
+
     <div class="messages">
       <div v-for="(msg, idx) in messages" :key="idx" class="msg" :class="msg.role === 'user' ? 'msg-user' : 'msg-assistant'">
         <strong>{{ msg.role === "user" ? "你：" : "AI：" }}</strong>{{ msg.content }}
+        <div v-if="msg.role === 'assistant' && msg.sources?.length" class="source-box">
+          <div class="source-title">引用来源：</div>
+          <div v-for="source in msg.sources" :key="source.id" class="source-item">
+            <strong>{{ source.title }} #{{ source.chunkIndex }}：</strong>{{ source.text }}
+          </div>
+        </div>
       </div>
     </div>
 
@@ -76,12 +97,56 @@ const systemPrompt = ref(promptTemplates[0].value);
 // 标记当前是否正在生成中
 const isGenerating = ref(false);
 
+// 是否启用 RAG 检索增强
+const useRag = ref(false);
+
+// 上传文件相关状态
+const selectedFile = ref(null);
+const uploadingFile = ref(false);
+const ragStatusText = ref("");
+
 // 用于中断请求（点击“停止生成”时调用）
 let currentAbortController = null;
 
 // 新开一个空会话
 function resetChat() {
   messages.value = [];
+}
+
+// 选择上传文件：这里只记录文件对象，实际读取在上传时进行
+function onFileChange(event) {
+  const file = event?.target?.files?.[0] || null;
+  selectedFile.value = file;
+}
+
+// 上传 txt/md 到后端 RAG 内存库
+async function uploadRagFile() {
+  if (!selectedFile.value || uploadingFile.value) return;
+  uploadingFile.value = true;
+  ragStatusText.value = "";
+
+  try {
+    // 浏览器原生 API：直接把文件内容读成文本
+    const content = await selectedFile.value.text();
+    const response = await fetch("/api/rag/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: selectedFile.value.name,
+        content
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      ragStatusText.value = `上传失败：${data?.error || "未知错误"}`;
+      return;
+    }
+    ragStatusText.value = `上传成功：${data.title}，切分 ${data.chunkCount} 段（总段数 ${data.totalChunks}）`;
+  } catch (error) {
+    ragStatusText.value = `上传异常：${String(error)}`;
+  } finally {
+    uploadingFile.value = false;
+  }
 }
 
 // 发送消息并处理流式响应
@@ -93,7 +158,7 @@ async function sendMessage() {
   messages.value.push({ role: "user", content: userText });
 
   // 2) 再放一个“空的助手消息”，后面流式 token 不断追加到这里
-  const assistantMessage = { role: "assistant", content: "" };
+  const assistantMessage = { role: "assistant", content: "", sources: [] };
   messages.value.push(assistantMessage);
 
   // 3) 清空输入框，准备请求
@@ -109,6 +174,7 @@ async function sendMessage() {
       body: JSON.stringify({
         model: selectedModel.value,
         systemPrompt: systemPrompt.value,
+        useRag: useRag.value,
         messages: messages.value.filter((m) => m.role === "user" || m.role === "assistant")
       }),
       signal: currentAbortController.signal
@@ -143,6 +209,10 @@ async function sendMessage() {
           // token 事件就不断追加，让你看到“打字机效果”
           if (event.type === "token" && event.token) {
             assistantMessage.content += event.token;
+          }
+          // sources 事件用于展示本次回答参考了哪些文档片段
+          if (event.type === "sources" && Array.isArray(event.sources)) {
+            assistantMessage.sources = event.sources;
           }
 
           // error 事件显示错误信息
