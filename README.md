@@ -28,6 +28,8 @@
 
 **部署命令都是啥意思（备忘）**：**[docs/服务器部署指令DEPLOY-COMMANDS-EXPLAINED.md](./docs/服务器部署指令DEPLOY-COMMANDS-EXPLAINED.md)**。
 
+**本次阿里云从部署到跑通（踩坑：构建慢、DeepSeek 要配 BaseURL）**：[docs/DEPLOY-阿里云部署实录与踩坑.md](./docs/DEPLOY-阿里云部署实录与踩坑.md)。
+
 ### 本机试跑「生产形态」
 
 ```bash
