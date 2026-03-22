@@ -6,17 +6,19 @@
 - Express 后端
 - 兼容 OpenAI 的流式接口（SSE）
 - 模型切换 + Prompt 模板 + 停止生成
-- 历史会话（浏览器 `localStorage`，后端不落库）
+- 历史会话：**浏览器 `localStorage` + 服务端 SQLite（P1）双写**，匿名 `X-Client-Id`
 - 左侧 `ChatSidebar`：历史会话 + 知识库文件上传
 
 ---
 
 ## 历史会话说明
 
-- 会话列表、消息、系统提示与所选模型会保存在本机浏览器（键名如 `ai-copilot-sessions-v1`）。
-- **换浏览器 / 清缓存会丢数据**；若要多端同步或登录用户维度存储，需再接入后端 API + 数据库（当前 `server` 未提供 `/api/sessions`）。
-- 侧栏组件：`web/src/components/ChatSidebar.vue`；主逻辑仍在 `web/src/App.vue`。
-- 侧栏体验：拖动 **⋮⋮** 调整顺序（`localStorage` 键 `ai-copilot-session-order-v1`）；双击标题或点 **名** 重命名（带 `titleLocked`，不会被自动标题覆盖）；**导出备份 / 导入备份** 为 JSON 文件。
+- **本地缓存**：键名如 `ai-copilot-sessions-v1`、`ai-copilot-session-order-v1`；换浏览器仍会丢本地缓存，但**同一浏览器 + 后端在线**时，会话会同步到 `server/data/copilot.db`（`better-sqlite3`）。
+- **服务端 API（匿名设备）**：`GET /api/sessions`、`PUT /api/sessions`，请求头必须带 **`X-Client-Id: <UUID>`**（前端自动生成在 `localStorage` 的 `ai-copilot-client-id`）。**无登录**，多设备需自行复制该 UUID（后续可接账号体系）。
+- **合并策略（当前）**：启动时若服务端有条目则以**服务端为准**；若服务端空而本地有数据则**上传到服务端**。
+- 侧栏会显示「服务端会话：已同步 / 离线」；离线时仍只用本地。
+- 侧栏体验：拖动 **⋮⋮** 排序；双击标题或 **名** 重命名（`titleLocked`）；**导出/导入 JSON** 备份。
+- 代码：`web/src/sessionSync.js`、`server/db.js`、`server/sessionsStore.js`；侧栏 UI：`web/src/components/ChatSidebar.vue`。
 
 ---
 
@@ -47,7 +49,7 @@ npm run dev
 
 - `http://localhost:3000/api/health`
 
-看到 `ok: true` 说明后端正常。
+看到 `ok: true` 且 `hasSessionsApi: true` 说明后端正常（含会话接口）。
 
 ---
 
@@ -93,8 +95,7 @@ npm run dev
 
 ## 6. 下一步建议（你半个月版本）
 
-- RAG 已可上传；可继续做：分块策略优化、向量库、引用质量评估
+- RAG：分块策略优化、向量库、引用质量评估
 - 增加 token/成本统计面板（前后端埋点）
-- **服务端会话**：REST + SQLite/Postgres（与现有浏览器会话并存或迁移）
+- **会话**：登录用户、多租户、`activeSessionId` 服务端化、冲突合并策略
 - 增加工具调用（搜索/数据库查询）
-- 侧栏：会话重命名、拖拽排序、导出/导入 JSON 备份

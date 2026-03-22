@@ -3,6 +3,7 @@
   <aside class="session-sidebar chat-app-sidebar">
     <section class="sidebar-section" aria-label="历史会话">
       <h2>历史会话</h2>
+      <p v-if="serverSyncHint" class="sidebar-server-sync">{{ serverSyncHint }}</p>
       <div class="sidebar-backup-row">
         <button type="button" class="sidebar-secondary-btn" @click="emit('export-backup')">导出备份</button>
         <button type="button" class="sidebar-secondary-btn" @click="triggerImport">导入备份</button>
@@ -112,6 +113,11 @@ const props = defineProps({
     default: ""
   },
   ragStatusText: {
+    type: String,
+    default: ""
+  },
+  /** P1：服务端 SQLite 同步状态文案（由 App.vue 传入） */
+  serverSyncHint: {
     type: String,
     default: ""
   }

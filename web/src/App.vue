@@ -7,6 +7,7 @@
       :uploading-file="uploadingFile"
       :selected-file-name="selectedFileName"
       :rag-status-text="ragStatusText"
+      :server-sync-hint="serverSyncHint"
       @create-session="createNewSession"
       @switch-session="switchSession"
       @delete-session="deleteSession"
@@ -121,12 +122,10 @@
 <script setup>
 import { ref, nextTick, computed, onMounted } from "vue";
 import ChatSidebar from "./components/ChatSidebar.vue";
+import { getApiBase } from "./apiBase.js";
+import { fetchServerSessions, putServerSessions } from "./sessionSync.js";
 
-// 开发环境下：Vite 的 /api 代理会缓冲 SSE，流式会「一整段才到前端」。
-// 所以流式相关请求直连后端 3000；生产环境仍用相对路径（同域部署）。
-function getApiBase() {
-  return import.meta.env.DEV ? "http://localhost:3000" : "";
-}
+// 流式请求仍直连后端 3000，见 apiBase.js
 
 // 预置几个模型名称，你可以按自己 key 支持的模型改
 const models = ["gpt-4o-mini", "deepseek-chat", "qwen-plus"];
@@ -175,6 +174,23 @@ const SESSION_ORDER_STORAGE_KEY = "ai-copilot-session-order-v1";
 const sessions = ref([]);
 const activeSessionId = ref("");
 const sessionSidebarOrder = ref([]);
+
+/** P1：与服务端 SQLite 同步状态（仅展示） */
+const serverSyncStatus = ref("idle");
+const serverSyncHint = computed(() => {
+  switch (serverSyncStatus.value) {
+    case "loading":
+      return "服务端会话：同步中…";
+    case "synced":
+      return "服务端会话：已同步（SQLite）";
+    case "offline":
+      return "服务端会话：离线（仅本地，请确认后端 3000 已启动）";
+    case "error":
+      return "服务端会话：同步异常";
+    default:
+      return "";
+  }
+});
 
 // 按 sessionSidebarOrder 排会话；顺序里没有的 id 会按 updatedAt 降序补在末尾
 const displaySessions = computed(() => {
@@ -240,14 +256,112 @@ function ensureSessionOrderConsistency() {
   sessionSidebarOrder.value = order;
 }
 
-// 把整个 sessions + 侧栏顺序 + 当前选中 id 写回本地
-function saveSessionsToStorage() {
+// 把整个 sessions + 侧栏顺序 + 当前选中 id 写回本地；可选跳过服务端防抖上传
+function saveSessionsToStorage(options = {}) {
   try {
     localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions.value));
     localStorage.setItem(SESSION_ORDER_STORAGE_KEY, JSON.stringify(sessionSidebarOrder.value));
     localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, activeSessionId.value);
   } catch (e) {
     console.warn("[会话] 写入 localStorage 失败（可能超出配额）", e);
+  }
+  if (!options.skipServer) {
+    scheduleServerSync();
+  }
+}
+
+let serverSyncTimer = null;
+
+function scheduleServerSync() {
+  if (serverSyncTimer) clearTimeout(serverSyncTimer);
+  serverSyncTimer = setTimeout(() => {
+    serverSyncTimer = null;
+    pushSessionsToServer();
+  }, 650);
+}
+
+function normalizeServerSession(s) {
+  return {
+    id: s.id,
+    title: s.title || "新会话",
+    titleLocked: !!s.titleLocked,
+    messages: Array.isArray(s.messages) ? s.messages : [],
+    updatedAt: Number(s.updatedAt) || Date.now(),
+    systemPrompt: s.systemPrompt,
+    selectedModel: s.selectedModel
+  };
+}
+
+async function pushSessionsToServer() {
+  if (sessions.value.length === 0) return;
+  try {
+    await putServerSessions({
+      sessions: JSON.parse(JSON.stringify(sessions.value)),
+      sessionOrder: [...sessionSidebarOrder.value]
+    });
+    serverSyncStatus.value = "synced";
+  } catch (e) {
+    console.warn("[服务端会话] 上传失败", e);
+    serverSyncStatus.value = "offline";
+  }
+}
+
+async function hydrateFromServer() {
+  serverSyncStatus.value = "loading";
+  try {
+    const data = await fetchServerSessions();
+    if (data.sessions?.length > 0) {
+      sessions.value = data.sessions.map(normalizeServerSession);
+      sessionSidebarOrder.value = Array.isArray(data.sessionOrder)
+        ? data.sessionOrder.filter((id) => typeof id === "string")
+        : [];
+      ensureSessionOrderConsistency();
+      const savedActive = localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
+      const exists =
+        savedActive && sessions.value.some((s) => s.id === savedActive);
+      activeSessionId.value = exists ? savedActive : sessions.value[0].id;
+      applySessionToUI(activeSessionId.value);
+      saveSessionsToStorage({ skipServer: true });
+      serverSyncStatus.value = "synced";
+      return;
+    }
+    serverSyncStatus.value = "synced";
+  } catch (e) {
+    console.warn("[服务端会话] GET 失败，使用本地数据", e);
+    serverSyncStatus.value = "offline";
+  }
+
+  if (sessions.value.length === 0) {
+    const id = generateSessionId();
+    sessions.value = [
+      {
+        id,
+        title: "新会话",
+        titleLocked: false,
+        messages: [],
+        updatedAt: Date.now(),
+        systemPrompt: promptTemplates[0].value,
+        selectedModel: models[0]
+      }
+    ];
+    sessionSidebarOrder.value = [id];
+    activeSessionId.value = id;
+    applySessionToUI(id);
+    saveSessionsToStorage({ skipServer: false });
+    return;
+  }
+
+  ensureSessionOrderConsistency();
+  const savedActive = localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
+  const exists = savedActive && sessions.value.some((s) => s.id === savedActive);
+  activeSessionId.value = exists ? savedActive : sessions.value[0].id;
+  applySessionToUI(activeSessionId.value);
+
+  try {
+    await pushSessionsToServer();
+    serverSyncStatus.value = "synced";
+  } catch {
+    serverSyncStatus.value = "offline";
   }
 }
 
@@ -291,11 +405,13 @@ function createNewSession() {
   sessions.value.unshift({
     id,
     title: "新会话",
+    titleLocked: false,
     messages: [],
     updatedAt: Date.now(),
     systemPrompt: systemPrompt.value,
     selectedModel: selectedModel.value
   });
+  sessionSidebarOrder.value = [id, ...sessionSidebarOrder.value.filter((x) => x !== id)];
   activeSessionId.value = id;
   messages.value = [];
   ragMatchHint.value = "";
@@ -392,40 +508,18 @@ async function importSessionsBackup(file) {
     activeSessionId.value = exists ? aid : sessions.value[0].id;
     applySessionToUI(activeSessionId.value);
     saveSessionsToStorage();
+    await pushSessionsToServer();
   } catch (e) {
     console.warn("[导入备份] 失败", e);
     alert(`导入失败：${String(e)}`);
   }
 }
 
-// 页面首次加载：恢复会话；没有则建一条默认的
-onMounted(() => {
+// 页面首次加载：先读本地缓存，再与服务端 SQLite 对齐（P1）
+onMounted(async () => {
   loadSessionsFromStorage();
   loadSessionOrderFromStorage();
-  if (sessions.value.length === 0) {
-    const id = generateSessionId();
-    sessions.value = [
-      {
-        id,
-        title: "新会话",
-        titleLocked: false,
-        messages: [],
-        updatedAt: Date.now(),
-        systemPrompt: promptTemplates[0].value,
-        selectedModel: models[0]
-      }
-    ];
-    sessionSidebarOrder.value = [id];
-    activeSessionId.value = id;
-    saveSessionsToStorage();
-  } else {
-    ensureSessionOrderConsistency();
-    const savedActive = localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
-    const exists = savedActive && sessions.value.some((s) => s.id === savedActive);
-    activeSessionId.value = exists ? savedActive : sessions.value[0].id;
-    applySessionToUI(activeSessionId.value);
-    saveSessionsToStorage();
-  }
+  await hydrateFromServer();
 });
 
 // 基础日志面板：是否展开、日志列表

@@ -127,6 +127,13 @@ body {
   margin-bottom: 8px;
 }
 
+.sidebar-server-sync {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #64748b;
+}
+
 .session-item {
   display: flex;
   align-items: center;

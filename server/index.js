@@ -1,20 +1,45 @@
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
+import "./db.js";
+import { getClientState, putClientState } from "./sessionsStore.js";
 
-// 【会话历史】聊天会话列表由前端 localStorage 持久化，本服务不提供 /api/sessions。
-// 若以后要多端同步或登录用户，可在此增加 REST + 数据库，与现有 chat/stream、RAG 并行。
+// 【会话历史】P1：SQLite 持久化 + GET/PUT /api/sessions（请求头 X-Client-Id: UUID 标识匿名浏览器）
+// 前端仍写 localStorage 作离线缓存；在线时与服务端双向同步。登录用户与多租户可后续扩展。
+// db.js 内会先 dotenv.config()，再打开 SQLite，避免 import 顺序导致读不到 .env
 
-// 加载 .env 环境变量，方便本地开发时读取 key/baseURL
 dotenv.config();
 
 const app = express();
 
-// 允许前端跨域访问后端接口（开发阶段最省事）
-app.use(cors());
+// 允许前端跨域；自定义头 X-Client-Id 用于会话归属（预检 OPTIONS）
+app.use(
+  cors({
+    origin: true,
+    allowedHeaders: ["Content-Type", "X-Client-Id"],
+  }),
+);
 
 // 解析 JSON 请求体，让我们能直接拿到 req.body
 app.use(express.json({ limit: "1mb" }));
+
+const json10mb = express.json({ limit: "10mb" });
+
+/** 匿名客户端 id：与前端 localStorage 里的 ai-copilot-client-id 一致 */
+const CLIENT_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function requireClientId(req, res, next) {
+  const raw = req.headers["x-client-id"];
+  const id = typeof raw === "string" ? raw.trim() : "";
+  if (!id || !CLIENT_ID_RE.test(id)) {
+    return res.status(400).json({
+      error: "需要请求头 X-Client-Id（UUID），用于标识当前浏览器客户端",
+    });
+  }
+  req.clientId = id;
+  next();
+}
 
 const PORT = Number(process.env.PORT || 3000);
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
@@ -115,7 +140,35 @@ app.get("/api/health", (_req, res) => {
     service: "ai-copilot-server",
     startedAt: serverStartedAt,
     hasStreamDemo: true,
+    hasSessionsApi: true,
   });
+});
+
+// ---------- 服务端会话（SQLite）----------
+app.get("/api/sessions", requireClientId, (req, res) => {
+  try {
+    const { sessions, sessionOrder } = getClientState(req.clientId);
+    res.json({ ok: true, sessions, sessionOrder });
+  } catch (e) {
+    console.error("[sessions GET]", e);
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+app.put("/api/sessions", json10mb, requireClientId, (req, res) => {
+  try {
+    const { sessions, sessionOrder } = req.body || {};
+    putClientState(req.clientId, { sessions, sessionOrder });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("[sessions PUT]", e);
+    const status =
+      String(e.message || e).includes("too many") ||
+      String(e.message || e).includes("must be")
+        ? 400
+        : 500;
+    res.status(status).json({ error: String(e) });
+  }
 });
 
 // 流式输出 demo：不调大模型，后端一个字一个字推送，用于验证前端流式渲染是否正常
