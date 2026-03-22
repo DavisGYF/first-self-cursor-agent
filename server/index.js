@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
@@ -10,6 +13,8 @@ import { ingestUpload, searchChunks, getRagConfigSummary } from "./rag.js";
 // db.js 内会先 dotenv.config()，再打开 SQLite，避免 import 顺序导致读不到 .env
 
 dotenv.config();
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 
@@ -522,7 +527,23 @@ app.post("/api/chat/stream", async (req, res) => {
   }
 });
 
+// 若存在 web 构建产物，则同域托管（与前端生产环境 getApiBase() === '' 一致）
+const webDist = path.join(__dirname, "..", "web", "dist");
+const webIndex = path.join(webDist, "index.html");
+if (fs.existsSync(webIndex)) {
+  app.use(express.static(webDist));
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api")) return next();
+    res.sendFile(webIndex, (err) => {
+      if (err) next(err);
+    });
+  });
+}
+
 // 启动服务
 app.listen(PORT, () => {
   console.log(`AI server running at http://localhost:${PORT}`);
+  if (fs.existsSync(webIndex)) {
+    console.log(`Web UI (dist) served from ${webDist}`);
+  }
 });

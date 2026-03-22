@@ -1,0 +1,15 @@
+{
+  "name": "ai-copilot",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Monorepo root: Railway / CI 构建与启动入口（web 构建 + server 依赖）",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build:web && npm run build:server",
+    "build:web": "npm ci --prefix web && npm run build --prefix web",
+    "build:server": "npm ci --prefix server",
+    "start": "node server/index.js"
+  }
+}

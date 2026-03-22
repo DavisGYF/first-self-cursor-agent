@@ -1,0 +1,11 @@
+# Railway：https://railway.app — 部署后由平台常驻运行，无需本机启动
+# 在控制台设置环境变量 OPENAI_API_KEY（详见 docs/RAILWAY.md）
+
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "npm start"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"

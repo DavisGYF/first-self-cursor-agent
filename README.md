@@ -7,7 +7,43 @@
 - 兼容 OpenAI 的流式接口（SSE）
 - 模型切换 + Prompt 模板 + 停止生成
 - 历史会话：**浏览器 `localStorage` + 服务端 SQLite（P1）双写**，匿名 `X-Client-Id`
-- 左侧 `ChatSidebar`：历史会话 + 知识库文件上传
+- 左侧 `ChatSidebar`：历史会话；**知识库上传**在主区「启用 RAG」一行右侧
+
+---
+
+## 部署上线（公网链接 / 二维码）
+
+思路：**先构建前端**，再**只跑 Node 后端**；若存在 `web/dist`，后端会**同域托管页面**（与 `getApiBase()` 生产环境一致）。
+
+### Railway（推荐：可视化、不用本机常驻）
+
+仓库根目录已带 **`package.json` + `railway.toml`**：连 GitHub → 在 [Railway](https://railway.com) 里 **Deploy from repo**，在 **Variables** 里设 **`OPENAI_API_KEY`**，再 **Generate Domain** 即可拿到 `https://xxx.up.railway.app`。
+
+- **部署成功后**：服务跑在 Railway 上，**不需要你电脑开机或执行 `npm start`**；别人随时用该链接访问（额度与计费以 Railway 官网为准）。
+- **详细步骤与可选 SQLite 持久化**：见 **[docs/RAILWAY.md](./docs/RAILWAY.md)**。
+
+### 本机试跑「生产形态」
+
+```bash
+cd web && npm install && npm run build
+cd ../server && npm install && npm start
+```
+
+或在**仓库根目录**：`npm install && npm run build && npm start`，浏览器打开 `http://localhost:3000`（页面 + `/api/*` 同一端口）。
+
+### 自建 VPS（典型）
+
+1. **准备**：一台有公网 IP 的 Linux，安装 Node ≥18。
+2. 在服务器上执行根目录 `npm ci && npm run build`，用 **PM2** 跑 `npm start`（工作目录为仓库根），并放行 **`PORT`**（默认 3000）。
+3. **环境变量**：配置 `OPENAI_API_KEY` 等（可用 `server/.env` 或进程环境变量）。
+4. **HTTPS**：**Nginx / Caddy** 反代 + Let’s Encrypt。
+5. **发给别人 / 二维码**：同上。
+
+> **注意**：不要把含 Key 的 `.env` 提交到 Git；公网演示建议加访问限制，避免 Key 被盗刷。
+
+### 其他托管平台
+
+**Render / Fly.io** 等也可：构建需执行根目录 `npm run build`，启动 `npm start`，并配置环境变量（与 Railway 类似）。
 
 ---
 
