@@ -27,6 +27,11 @@
 - **检索**：默认 **BM25**（关键词统计）；若设置 **`RAG_EMBEDDING=1`** 且配置了 **`OPENAI_API_KEY`**，上传后会写入 **embedding**，检索时优先用 **语义相似度（余弦）**，失败则回退 BM25。
 - **可调**：`RAG_CHUNK_*`、`RAG_TOP_K`、`RAG_MIN_RELATIVE_SCORE`、`RAG_EMBEDDING`、`RAG_EMBEDDING_MODEL`。
 
+### 可观测（P3）
+
+- 主界面 **「查看日志」**：拉取 `GET /api/logs`，含 **汇总**（成功/失败、平均耗时、累计输出 token、粗算 USD、RAG 请求与命中率）与 **明细**（每条请求的估入 token、出 token、成本、RAG 是否命中片段）。
+- 输入 token 为 **JSON 长度粗估**，成本为 **示意单价**，非对账精度；面试时说明「可接真实 usage 字段 / 导出到监控」即可。
+
 ---
 
 ## 1. 先准备环境
@@ -102,7 +107,6 @@ npm run dev
 
 ## 6. 下一步建议（你半个月版本）
 
-- RAG：embedding + 向量库、引用质量评估（人工/自动）
-- **P3 可观测**：token/成本统计面板（加强 `/api/logs` 前端展示与汇总）— 你提到优先做完 P2 再做
+- RAG：引用质量评估（人工/自动）、多文档权限
 - **会话**：登录用户、多租户、`activeSessionId` 服务端化、冲突合并策略
 - 增加工具调用（搜索/数据库查询）

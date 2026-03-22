@@ -338,3 +338,70 @@ button:disabled {
   font-weight: normal;
   color: #64748b;
 }
+
+/* P3 可观测面板 */
+.obs-panel .obs-pitch {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #64748b;
+}
+
+.obs-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.obs-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.obs-card-wide {
+  grid-column: 1 / -1;
+}
+
+.obs-card-k {
+  font-size: 11px;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.obs-card-v {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.obs-log-row {
+  line-height: 1.5;
+}
+
+.obs-log-err {
+  border-left: 3px solid #dc2626;
+  padding-left: 8px;
+}
+
+.obs-log-time {
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.obs-log-ok {
+  margin-right: 4px;
+}
+
+.obs-rag {
+  color: #0369a1;
+  font-size: 11px;
+}
+
+.obs-err-text {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #b91c1c;
+}

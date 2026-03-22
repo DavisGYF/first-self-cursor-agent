@@ -49,27 +49,97 @@ const OPENAI_BASE_URL =
 const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "gpt-4o-mini";
 
 // =========================
-// 基础日志模块：记录每次聊天的耗时、token、错误码
-// 面试时可以讲：我做了可观测，方便排查问题和统计成本
+// P3 可观测：单次请求日志 + 汇总（面试可讲：耗时、token、RAG 命中、粗算成本）
 // =========================
-// 用数组存日志，重启后清空；生产环境可改成写文件或数据库
 const chatLogs = [];
-const MAX_LOGS = 100; // 最多保留 100 条，避免内存爆掉
+const MAX_LOGS = 100;
 
-// 记录单次聊天请求的日志
-// 参数说明：startTime 请求开始时间戳，model 模型名，outputTokens 输出 token 数，error 若有错误则传错误信息
-function recordChatLog({ startTime, model, useRag, outputTokens, error }) {
+/** 美元/1K tokens（示意价，可按 .env 覆盖；仅作 Demo 量级感） */
+const COST_HINT = {
+  "gpt-4o-mini": { inPer1k: 0.00015, outPer1k: 0.0006 },
+  "gpt-4o": { inPer1k: 0.0025, outPer1k: 0.01 },
+  "deepseek-chat": { inPer1k: 0.00014, outPer1k: 0.00028 },
+  "qwen-plus": { inPer1k: 0.0005, outPer1k: 0.0015 },
+  default: { inPer1k: 0.001, outPer1k: 0.002 },
+};
+
+function estimateCostUsd(model, estimatedPromptTokens, outputTokens) {
+  const m = String(model || "");
+  let rates = COST_HINT.default;
+  if (COST_HINT[m]) rates = COST_HINT[m];
+  else if (m.includes("gpt-4o-mini")) rates = COST_HINT["gpt-4o-mini"];
+  else if (m.includes("deepseek")) rates = COST_HINT["deepseek-chat"];
+  else if (m.includes("qwen")) rates = COST_HINT["qwen-plus"];
+  else if (m.includes("gpt-4o")) rates = COST_HINT["gpt-4o"];
+  const inTok = Math.max(0, estimatedPromptTokens || 0);
+  const outTok = Math.max(0, outputTokens || 0);
+  return (
+    (inTok / 1000) * rates.inPer1k + (outTok / 1000) * rates.outPer1k
+  );
+}
+
+/**
+ * 记录一次 /api/chat/stream 相关调用
+ * estimatedPromptTokens：用最终 messages JSON 长度粗估（非官方 usage，仅面板展示）
+ */
+function recordChatLog({
+  startTime,
+  model,
+  useRag,
+  outputTokens,
+  error,
+  ragHitCount = 0,
+  ragMatched = false,
+  estimatedPromptTokens = 0,
+}) {
   const elapsed = Math.round(Date.now() - startTime);
+  const outTok = outputTokens || 0;
+  const inEst = Math.max(0, Number(estimatedPromptTokens) || 0);
   const log = {
     time: new Date().toISOString(),
-    elapsed, // 毫秒
+    elapsed,
     model,
     useRag: !!useRag,
-    outputTokens: outputTokens || 0,
+    ragMatched: !!ragMatched,
+    ragHitCount: Number(ragHitCount) || 0,
+    outputTokens: outTok,
+    estimatedPromptTokens: inEst,
     error: error || null,
+    status: error ? "error" : "ok",
+    estimatedCostUsd: Number(
+      estimateCostUsd(model, inEst, outTok).toFixed(6),
+    ),
   };
   chatLogs.push(log);
-  if (chatLogs.length > MAX_LOGS) chatLogs.shift(); // 超出则删掉最老的一条
+  if (chatLogs.length > MAX_LOGS) chatLogs.shift();
+}
+
+function computeLogsSummary(entries) {
+  const list = Array.isArray(entries) ? entries : [];
+  const success = list.filter((l) => !l.error);
+  const totalOut = success.reduce((s, l) => s + (l.outputTokens || 0), 0);
+  const totalInEst = success.reduce((s, l) => s + (l.estimatedPromptTokens || 0), 0);
+  const totalElapsed = success.reduce((s, l) => s + (l.elapsed || 0), 0);
+  const ragReq = list.filter((l) => l.useRag);
+  const ragHit = ragReq.filter((l) => l.ragMatched);
+  const totalCost = list.reduce((s, l) => s + (l.estimatedCostUsd || 0), 0);
+  return {
+    totalRecorded: list.length,
+    successCount: success.length,
+    errorCount: list.length - success.length,
+    totalOutputTokens: totalOut,
+    totalEstimatedInputTokens: totalInEst,
+    totalElapsedMs: totalElapsed,
+    avgElapsedMs:
+      success.length > 0 ? Math.round(totalElapsed / success.length) : 0,
+    ragRequestCount: ragReq.length,
+    ragHitRequestCount: ragHit.length,
+    ragHitRate:
+      ragReq.length > 0
+        ? Math.round((ragHit.length / ragReq.length) * 100)
+        : null,
+    totalEstimatedCostUsd: Number(totalCost.toFixed(6)),
+  };
 }
 
 // RAG：段落分块 + BM25 见 ./rag.js（P2）
@@ -159,9 +229,14 @@ app.get("/api/stream-demo", (req, res) => {
   });
 });
 
-// 日志查询接口：返回最近的聊天日志，供前端成本面板或调试使用
+// 日志查询：明细 + 汇总（P3）
 app.get("/api/logs", (_req, res) => {
-  res.json({ ok: true, logs: [...chatLogs].reverse() });
+  const arr = [...chatLogs];
+  res.json({
+    ok: true,
+    logs: arr.reverse(),
+    summary: computeLogsSummary(arr),
+  });
 });
 
 // RAG 上传接口：切分后写入 SQLite + 内存；可选 embedding（见 rag.js）
@@ -211,10 +286,11 @@ app.post("/api/rag/query", async (req, res) => {
 
 // 流式聊天接口：前端通过 fetch + ReadableStream 一边收一边展示
 app.post("/api/chat/stream", async (req, res) => {
-  // 记录请求开始时间，用于计算耗时（面试可讲：可观测性）
   const startTime = Date.now();
-  // 输出 token 计数器，流式返回时每收到一个 token 就 +1
   let outputTokens = 0;
+  let ragHitCount = 0;
+  let ragMatched = false;
+  let estimatedPromptTokens = 0;
 
   try {
     // 请求体可传 model/messages/systemPrompt，不传就走默认值
@@ -227,12 +303,16 @@ app.post("/api/chat/stream", async (req, res) => {
 
     // 如果没配 key，直接报错并提示如何修复
     if (!OPENAI_API_KEY) {
+      const estIn = Math.ceil(JSON.stringify(messages).length / 4);
       recordChatLog({
         startTime,
         model,
         useRag,
         outputTokens: 0,
         error: "Missing OPENAI_API_KEY",
+        ragHitCount: 0,
+        ragMatched: false,
+        estimatedPromptTokens: estIn,
       });
       return res.status(400).json({
         error:
@@ -272,6 +352,13 @@ app.post("/api/chat/stream", async (req, res) => {
         finalMessages.push({ role: item.role, content: item.content });
       }
     }
+
+    ragHitCount = sources.length;
+    ragMatched = ragHitCount > 0;
+    estimatedPromptTokens = Math.max(
+      1,
+      Math.ceil(JSON.stringify(finalMessages).length / 4),
+    );
 
     // 设置 SSE 响应头，告诉浏览器这是流式文本
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
@@ -334,6 +421,9 @@ app.post("/api/chat/stream", async (req, res) => {
         useRag,
         outputTokens: 0,
         error: `API ${response.status}: ${errorText.slice(0, 200)}`,
+        ragHitCount,
+        ragMatched,
+        estimatedPromptTokens,
       });
       res.write(
         `data: ${JSON.stringify({ type: "error", message: errorText })}\n\n`,
@@ -371,6 +461,9 @@ app.post("/api/chat/stream", async (req, res) => {
             useRag,
             outputTokens,
             error: null,
+            ragHitCount,
+            ragMatched,
+            estimatedPromptTokens,
           });
           res.write(
             `data: ${JSON.stringify({ type: "done", outputTokens, elapsed: Date.now() - startTime })}\n\n`,
@@ -400,19 +493,26 @@ app.post("/api/chat/stream", async (req, res) => {
       useRag,
       outputTokens,
       error: null,
+      ragHitCount,
+      ragMatched,
+      estimatedPromptTokens,
     });
     res.write(
       `data: ${JSON.stringify({ type: "done", outputTokens, elapsed: Date.now() - startTime })}\n\n`,
     );
     res.end();
   } catch (error) {
-    // 统一兜底错误：未捕获的异常（如网络中断），记录到日志
+    const body = req?.body || {};
+    const estCatch = Math.ceil(JSON.stringify(body.messages || []).length / 4);
     recordChatLog({
       startTime,
-      model: req?.body?.model || DEFAULT_MODEL,
-      useRag: !!req?.body?.useRag,
+      model: body.model || DEFAULT_MODEL,
+      useRag: !!body.useRag,
       outputTokens: 0,
       error: String(error),
+      ragHitCount,
+      ragMatched,
+      estimatedPromptTokens: estimatedPromptTokens || estCatch,
     });
     res.write(
       `data: ${JSON.stringify({ type: "error", message: String(error) })}\n\n`,

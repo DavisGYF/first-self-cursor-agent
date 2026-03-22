@@ -100,20 +100,60 @@
       <button type="button" @click="clearStreamDebug">清空</button>
     </div>
 
-    <!-- 基础日志面板：展示每次请求的耗时、token、错误（面试可讲：可观测性） -->
-    <div v-if="showLogPanel" class="source-box" style="margin-top: 12px;">
-      <div class="source-title">最近请求日志（耗时 / token / 错误）</div>
-      <button @click="fetchLogs" style="margin-bottom: 8px;">刷新</button>
-      <div v-if="logs.length === 0" class="source-item">暂无记录，发几条消息后刷新</div>
+    <!-- P3 可观测：汇总 + 明细（简历/面试：耗时、token、RAG 命中率、粗算成本） -->
+    <div v-if="showLogPanel" class="source-box obs-panel" style="margin-top: 12px;">
+      <div class="source-title">请求可观测（本进程内存，重启清空）</div>
+      <p class="obs-pitch">
+        面试可讲：每次对话打日志，汇总成功率、RAG 是否命中片段、输出 token 与粗算美元（输入 token 为 JSON 长度估算，非账单精度）。
+      </p>
+      <button type="button" @click="fetchLogs" style="margin-bottom: 10px;">刷新</button>
+
+      <div v-if="logsSummary" class="obs-summary-grid">
+        <div class="obs-card">
+          <div class="obs-card-k">成功 / 失败</div>
+          <div class="obs-card-v">{{ logsSummary.successCount }} / {{ logsSummary.errorCount }}</div>
+        </div>
+        <div class="obs-card">
+          <div class="obs-card-k">平均耗时</div>
+          <div class="obs-card-v">{{ logsSummary.avgElapsedMs }} ms</div>
+        </div>
+        <div class="obs-card">
+          <div class="obs-card-k">累计输出 token</div>
+          <div class="obs-card-v">{{ logsSummary.totalOutputTokens }}</div>
+        </div>
+        <div class="obs-card">
+          <div class="obs-card-k">粗算总成本 USD</div>
+          <div class="obs-card-v">~{{ logsSummary.totalEstimatedCostUsd }}</div>
+        </div>
+        <div class="obs-card obs-card-wide">
+          <div class="obs-card-k">RAG 请求 / 命中资料</div>
+          <div class="obs-card-v">
+            {{ logsSummary.ragRequestCount }} 次 /
+            {{ logsSummary.ragHitRequestCount }} 次命中
+            <span v-if="logsSummary.ragHitRate != null">（命中率 {{ logsSummary.ragHitRate }}%）</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="source-title" style="margin-top: 12px;">最近明细（新在上）</div>
+      <div v-if="logs.length === 0" class="source-item">暂无记录，发几条消息后点刷新</div>
       <div
         v-for="(log, idx) in logs"
         :key="idx"
-        class="source-item"
-        :style="{ color: log.error ? '#c00' : '' }"
+        class="source-item obs-log-row"
+        :class="{ 'obs-log-err': !!log.error }"
       >
-        {{ log.time?.slice(11, 19) }} | {{ log.elapsed }}ms | {{ log.outputTokens }} tokens |
-        {{ log.model }} {{ log.useRag ? "[RAG]" : "" }}
-        <span v-if="log.error"> | 错误: {{ log.error }}</span>
+        <span class="obs-log-time">{{ log.time?.slice(11, 19) }}</span>
+        <span class="obs-log-ok">{{ log.error ? "✗" : "✓" }}</span>
+        {{ log.elapsed }}ms
+        · 出 {{ log.outputTokens }} tok
+        · 估入 ~{{ log.estimatedPromptTokens ?? "—" }} tok
+        · ~${{ log.estimatedCostUsd ?? "—" }}
+        · {{ log.model }}
+        <span v-if="log.useRag" class="obs-rag">
+          [RAG{{ log.ragMatched ? "·命中" + log.ragHitCount + "段" : "·未命中" }}]
+        </span>
+        <div v-if="log.error" class="obs-err-text">错误: {{ log.error }}</div>
       </div>
     </div>
   </div>
@@ -581,11 +621,13 @@ function toggleLogPanel() {
 // 从后端拉取最近请求日志（GET /api/logs）
 async function fetchLogs() {
   try {
-    const res = await fetch("/api/logs");
+    const res = await fetch(`${getApiBase()}/api/logs`);
     const data = await res.json();
     if (data?.ok && Array.isArray(data.logs)) logs.value = data.logs;
+    logsSummary.value = data?.summary || null;
   } catch {
     logs.value = [];
+    logsSummary.value = null;
   }
 }
 
