@@ -4,9 +4,6 @@
       :sessions="displaySessions"
       :active-session-id="activeSessionId"
       :is-generating="isGenerating"
-      :uploading-file="uploadingFile"
-      :selected-file-name="selectedFileName"
-      :rag-status-text="ragStatusText"
       :server-sync-hint="serverSyncHint"
       @create-session="createNewSession"
       @switch-session="switchSession"
@@ -15,168 +12,259 @@
       @reorder-sessions="reorderSessions"
       @export-backup="exportSessionsBackup"
       @import-backup="importSessionsBackup"
-      @file-change="onFileChange"
-      @upload-click="uploadRagFile"
     />
 
     <div class="main-column">
-  <div class="panel">
-    <h1 class="title">AI Copilot 全栈示例（Vue + Express）</h1>
-    <p class="subtitle">
-      功能概览：多模型对话、SSE 流式输出、会话管理（本地缓存 + 服务端同步）、知识库 RAG（段落分块 / BM25 或可选向量）、引用来源展示、请求监控与成本估算。
-    </p>
-    <p class="subtitle" style="font-size: 12px; color: #64748b;">
-      开发环境下流式请求直连后端 <code style="font-size: 11px;">localhost:3000</code>，避免 Vite 代理缓冲 SSE。健康检查：
-      <a href="http://localhost:3000/api/health" target="_blank">/api/health</a>
-      （<code>startedAt</code> 随进程重启变化）。
-    </p>
-
-    <div class="row">
-      <select v-model="selectedModel">
-        <option v-for="model in models" :key="model" :value="model">{{ model }}</option>
-      </select>
-    </div>
-
-    <div class="row">
-      <select @change="applyTemplate($event.target.value)">
-        <option v-for="item in promptTemplates" :key="item.label" :value="item.value">
-          {{ item.label }}
-        </option>
-      </select>
-    </div>
-
-    <div class="row">
-      <textarea
-        v-model="systemPrompt"
-        rows="3"
-        placeholder="系统提示词（告诉模型你希望它扮演什么角色）"
-      />
-    </div>
-
-    <div class="row" style="align-items: center;">
-      <label style="display: flex; align-items: center; gap: 6px;">
-        <input v-model="useRag" type="checkbox" />
-        启用 RAG（让回答参考你上传的文档）
-      </label>
-    </div>
-
-    <p v-if="ragMatchHint" class="subtitle" style="margin-top: -10px;">{{ ragMatchHint }}</p>
-
-    <div class="messages">
-      <div v-for="(msg, idx) in messages" :key="idx" class="msg" :class="msg.role === 'user' ? 'msg-user' : 'msg-assistant'">
-        <strong>{{ msg.role === "user" ? "你：" : "AI：" }}</strong>{{ msg.content }}
-        <div v-if="msg.role === 'assistant' && msg.sources?.length" class="source-box">
-          <div class="source-title">引用来源：</div>
-          <div v-for="source in msg.sources" :key="source.id" class="source-item">
-            <strong>{{ source.title }} #{{ source.chunkIndex }}</strong>
-            <span v-if="source.score != null" class="source-score">（相关度 {{ source.score.toFixed(4) }}）</span>
-            <strong>：</strong>{{ source.text }}
+      <el-card class="panel-card" shadow="hover">
+        <template #header>
+          <div class="card-header-row">
+            <span class="title">介助cursor搭建全栈示例（Vue + Express）</span>
           </div>
-        </div>
-      </div>
-    </div>
+        </template>
 
-    <div class="row" style="margin-top: 12px;">
-      <input
-        v-model="inputText"
-        placeholder="输入你的问题，回车发送"
-        @keyup.enter="sendMessage"
-      />
-    </div>
+        <div class="panel-stack">
+          <div class="panel-top-group">
+          <!-- 区块 1：说明 -->
+          <section class="panel-section panel-section--intro" aria-label="功能说明">
+            <el-text class="subtitle-block" type="info">
+              功能概览：多模型对话、SSE 流式输出、会话管理（本地缓存 + 服务端同步）、知识库 RAG（段落分块 / BM25
+              或可选向量）、引用来源展示、请求监控与成本估算。
+            </el-text>
+            <el-text size="small" type="info" class="subtitle-block subtitle-tight panel-intro-sub">
+              开发环境下流式请求直连后端
+              <code class="inline-code">localhost:3000</code>
+              ，避免 Vite 代理缓冲 SSE。健康检查：
+              <el-link href="http://localhost:3000/api/health" target="_blank" type="primary">/api/health</el-link>
+              （<code class="inline-code">startedAt</code> 随进程重启变化）。
+            </el-text>
+          </section>
 
-    <div class="row">
-      <button :disabled="isGenerating" @click="sendMessage">发送</button>
-      <button :disabled="!isGenerating" @click="stopGenerating">停止生成</button>
-      <button :disabled="isGenerating" @click="runStreamDemo">流式测试</button>
-      <button @click="toggleLogPanel">{{ showLogPanel ? "收起监控" : "请求监控" }}</button>
-      <label style="display: flex; align-items: center; gap: 6px; font-size: 13px;">
-        <input v-model="showStreamDebug" type="checkbox" />
-        显示流式调试（页面 + 浏览器控制台 F12）
-      </label>
-    </div>
+          <!-- 区块 2：模型与提示词（三项表单一体） -->
+          <section class="panel-section panel-section--settings" aria-label="模型与提示词">
+            <el-form label-position="left" label-width="100px" class="settings-form">
+              <el-row :gutter="16" class="settings-form-row">
+                <el-col :xs="24" :sm="12">
+                  <el-form-item label="大模型">
+                    <el-select
+                      v-model="selectedModel"
+                      placeholder="选择要调用的模型"
+                      filterable
+                      class="settings-form-control"
+                    >
+                      <el-option v-for="model in models" :key="model" :label="model" :value="model" />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+                <el-col :xs="24" :sm="12">
+                  <el-form-item label="场景模板">
+                    <el-select
+                      v-model="templatePickerValue"
+                      placeholder="选预设场景，一键填入下方系统提示词"
+                      class="settings-form-control"
+                      @change="applyTemplate"
+                    >
+                      <el-option
+                        v-for="item in promptTemplates"
+                        :key="item.label"
+                        :label="item.label"
+                        :value="item.value"
+                      />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+              </el-row>
 
-    <!-- 流式调试：对照后端终端日志，看「读到了几次 chunk、是否逐 token 解析」 -->
-    <div v-if="showStreamDebug" class="source-box" style="margin-top: 8px; max-height: 220px; overflow: auto;">
-      <div class="source-title">流式调试（最新在上）</div>
-      <pre style="margin: 0; font-size: 11px; line-height: 1.5; white-space: pre-wrap;">{{ streamDebugText }}</pre>
-      <button type="button" @click="clearStreamDebug">清空</button>
-    </div>
-
-    <!-- P3：请求监控 — 汇总 + 明细（耗时、token、RAG 命中、成本估算） -->
-    <div v-if="showLogPanel" class="source-box obs-panel" style="margin-top: 12px;">
-      <div class="source-title">请求监控（进程内缓存，服务重启后清空）</div>
-      <p class="obs-pitch">
-        <strong>功能说明：</strong>后端在每次对话流结束后写入结构化记录；此处展示汇总指标与最近明细，包括成功率、耗时、输出 token 量、按公开价目粗算的费用，以及开启 RAG
-        时是否命中知识片段。输入 token 由请求体长度估算，费用为示意值，适用于演示、排障与容量感知，不等同于账单对账。
-      </p>
-      <button type="button" @click="fetchLogs" style="margin-bottom: 10px;">刷新</button>
-
-      <div v-if="logsSummary" class="obs-summary-grid">
-        <div class="obs-card">
-          <div class="obs-card-k">成功 / 失败</div>
-          <div class="obs-card-v">{{ logsSummary.successCount }} / {{ logsSummary.errorCount }}</div>
-        </div>
-        <div class="obs-card">
-          <div class="obs-card-k">平均耗时</div>
-          <div class="obs-card-v">{{ logsSummary.avgElapsedMs }} ms</div>
-        </div>
-        <div class="obs-card">
-          <div class="obs-card-k">累计输出 token</div>
-          <div class="obs-card-v">{{ logsSummary.totalOutputTokens }}</div>
-        </div>
-        <div class="obs-card">
-          <div class="obs-card-k">粗算总成本 USD</div>
-          <div class="obs-card-v">~{{ logsSummary.totalEstimatedCostUsd }}</div>
-        </div>
-        <div class="obs-card obs-card-wide">
-          <div class="obs-card-k">RAG 请求 / 命中资料</div>
-          <div class="obs-card-v">
-            {{ logsSummary.ragRequestCount }} 次 /
-            {{ logsSummary.ragHitRequestCount }} 次命中
-            <span v-if="logsSummary.ragHitRate != null">（命中率 {{ logsSummary.ragHitRate }}%）</span>
+              <el-form-item label="系统提示词" class="settings-form-item--textarea">
+                <el-input
+                  v-model="systemPrompt"
+                  type="textarea"
+                  :rows="3"
+                  placeholder="告诉模型扮演什么角色、用什么语气与格式回答"
+                  resize="vertical"
+                  class="settings-form-control"
+                />
+              </el-form-item>
+            </el-form>
+          </section>
           </div>
-        </div>
-      </div>
 
-      <div class="source-title" style="margin-top: 12px;">最近明细（新在上）</div>
-      <div v-if="logs.length === 0" class="source-item">暂无记录，发几条消息后点刷新</div>
-      <div
-        v-for="(log, idx) in logs"
-        :key="idx"
-        class="source-item obs-log-row"
-        :class="{ 'obs-log-err': !!log.error }"
-      >
-        <span class="obs-log-time">{{ log.time?.slice(11, 19) }}</span>
-        <span class="obs-log-ok">{{ log.error ? "✗" : "✓" }}</span>
-        {{ log.elapsed }}ms
-        · 出 {{ log.outputTokens }} tok
-        · 估入 ~{{ log.estimatedPromptTokens ?? "—" }} tok
-        · ~${{ log.estimatedCostUsd ?? "—" }}
-        · {{ log.model }}
-        <span v-if="log.useRag" class="obs-rag">
-          [RAG{{ log.ragMatched ? "·命中" + log.ragHitCount + "段" : "·未命中" }}]
-        </span>
-        <div v-if="log.error" class="obs-err-text">错误: {{ log.error }}</div>
-      </div>
-    </div>
-  </div>
+          <!-- 区块 3：对话与操作（含监控等） -->
+          <section class="panel-section panel-section--conversation" aria-label="对话与操作">
+            <div class="conversation-layout">
+              <div class="rag-toolbar-row">
+                <el-checkbox v-model="useRag" class="rag-toolbar-checkbox">启用 RAG（让回答参考你上传的文档）</el-checkbox>
+                <div class="rag-kb-column">
+                  <div class="rag-kb-inline" aria-label="知识库文件">
+                    <div class="rag-kb-inline-main">
+                      <span class="rag-kb-label">知识库文件</span>
+                      <div class="rag-kb-controls">
+                        <el-upload
+                          class="rag-kb-upload"
+                          :auto-upload="false"
+                          :show-file-list="false"
+                          accept=".txt,.md,text/plain,text/markdown"
+                          @change="onRagUploadChange"
+                        >
+                          <template #trigger>
+                            <el-button type="primary" plain size="small">选择文件</el-button>
+                          </template>
+                        </el-upload>
+                        <el-button
+                          type="primary"
+                          size="small"
+                          :disabled="!hasSelectedRagFile || uploadingFile"
+                          :loading="uploadingFile"
+                          @click="uploadRagFile"
+                        >
+                          {{ uploadingFile ? "上传中..." : "上传知识库文件" }}
+                        </el-button>
+                      </div>
+                    </div>
+                    <div v-if="selectedFileName || ragStatusText" class="rag-kb-meta">
+                      <span v-if="selectedFileName" class="rag-kb-file-name" :title="selectedFileName">
+                        已选：{{ selectedFileName }}
+                      </span>
+                      <el-text v-if="ragStatusText" size="small" type="primary" class="rag-kb-status" tag="span">
+                        {{ ragStatusText }}
+                      </el-text>
+                    </div>
+                  </div>
+                  <p class="rag-kb-hint">
+                    上传 .txt / .md 至后端知识库（持久化存储），勾选「启用 RAG」后参与检索。
+                  </p>
+                </div>
+              </div>
+
+              <el-alert v-if="ragMatchHint" :title="ragMatchHint" type="info" show-icon :closable="false" />
+
+              <!-- 对话区：固定高度，仅框内滚动，不挤占下方输入/按钮 -->
+              <div class="chat-messages-fullbleed conversation-messages-grow">
+                <el-scrollbar class="messages-scrollbar messages-scrollbar-fill">
+                  <div class="messages messages-inner">
+                    <div
+                      v-for="(msg, idx) in messages"
+                      :key="idx"
+                      class="msg"
+                      :class="msg.role === 'user' ? 'msg-user' : 'msg-assistant'"
+                    >
+                      <strong>{{ msg.role === "user" ? "你：" : "AI：" }}</strong>{{ msg.content }}
+                      <div v-if="msg.role === 'assistant' && msg.sources?.length" class="source-box">
+                        <div class="source-title">引用来源：</div>
+                        <div v-for="source in msg.sources" :key="source.id" class="source-item">
+                          <strong>{{ source.title }} #{{ source.chunkIndex }}</strong>
+                          <span v-if="source.score != null" class="source-score"
+                            >（相关度 {{ source.score.toFixed(4) }}）</span
+                          >
+                          <strong>：</strong>{{ source.text }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </el-scrollbar>
+              </div>
+
+              <!-- 无消息时也占满中间区域，本块始终贴对话区最底部一行 -->
+              <div class="conversation-footer">
+                <el-input
+                  v-model="inputText"
+                  placeholder="输入你的问题，回车发送"
+                  clearable
+                  @keyup.enter="sendMessage"
+                />
+
+                <el-space wrap :size="8" class="conversation-actions">
+                  <el-button type="primary" :disabled="isGenerating" @click="sendMessage">发送</el-button>
+                  <el-button :disabled="!isGenerating" @click="stopGenerating">停止生成</el-button>
+                  <el-button :disabled="isGenerating" @click="runStreamDemo">流式测试</el-button>
+                  <el-button @click="toggleLogPanel">{{ showLogPanel ? "收起监控" : "请求监控" }}</el-button>
+                  <el-checkbox v-model="showStreamDebug" border>显示流式调试（页面 + 浏览器控制台 F12）</el-checkbox>
+                </el-space>
+              </div>
+            </div>
+
+            <el-card v-if="showStreamDebug" shadow="never" class="stream-debug-card">
+              <template #header>
+                <span class="source-title">流式调试（最新在上）</span>
+              </template>
+              <pre class="stream-debug-pre">{{ streamDebugText }}</pre>
+              <el-button size="small" @click="clearStreamDebug">清空</el-button>
+            </el-card>
+
+            <el-card v-if="showLogPanel" shadow="never" class="obs-card-wrap">
+              <template #header>
+                <div class="obs-header-row">
+                  <span class="source-title">请求监控（进程内缓存，服务重启后清空）</span>
+                  <el-button size="small" type="primary" plain @click="fetchLogs">刷新</el-button>
+                </div>
+              </template>
+              <p class="obs-pitch">
+                <strong>功能说明：</strong>后端在每次对话流结束后写入结构化记录；此处展示汇总指标与最近明细，包括成功率、耗时、输出
+                token 量、按公开价目粗算的费用，以及开启 RAG
+                时是否命中知识片段。输入 token 由请求体长度估算，费用为示意值，适用于演示、排障与容量感知，不等同于账单对账。
+              </p>
+
+              <div v-if="logsSummary" class="obs-summary-grid">
+                <el-card v-for="(cell, i) in obsSummaryCells" :key="i" shadow="never" class="obs-stat-card">
+                  <div class="obs-card-k">{{ cell.k }}</div>
+                  <div class="obs-card-v">{{ cell.v }}</div>
+                </el-card>
+              </div>
+
+              <el-divider content-position="left">最近明细（新在上）</el-divider>
+              <div v-if="logs.length === 0" class="source-item">暂无记录，发几条消息后点刷新</div>
+              <div
+                v-for="(log, idx) in logs"
+                :key="idx"
+                class="source-item obs-log-row"
+                :class="{ 'obs-log-err': !!log.error }"
+              >
+                <span class="obs-log-time">{{ log.time?.slice(11, 19) }}</span>
+                <span class="obs-log-ok">{{ log.error ? "✗" : "✓" }}</span>
+                {{ log.elapsed }}ms
+                · 出 {{ log.outputTokens }} tok
+                · 估入 ~{{ log.estimatedPromptTokens ?? "—" }} tok
+                · ~${{ log.estimatedCostUsd ?? "—" }}
+                · {{ log.model }}
+                <span v-if="log.useRag" class="obs-rag">
+                  [RAG{{ log.ragMatched ? "·命中" + log.ragHitCount + "段" : "·未命中" }}]
+                </span>
+                <div v-if="log.error" class="obs-err-text">错误: {{ log.error }}</div>
+              </div>
+            </el-card>
+          </section>
+        </div>
+      </el-card>
     </div>
   </div>
 </template>
 
-<script setup>
-import { ref, nextTick, computed, onMounted } from "vue";
+<script setup lang="ts">
+import { ref, computed, onMounted } from "vue";
+import { ElMessage, ElMessageBox } from "element-plus";
+import type { UploadFile } from "element-plus";
 import ChatSidebar from "./components/ChatSidebar.vue";
-import { getApiBase } from "./apiBase.js";
-import { fetchServerSessions, putServerSessions } from "./sessionSync.js";
+import type {
+  ChatLogEntry,
+  ChatMessage,
+  LogsApiResponse,
+  LogsSummary,
+  PromptTemplate,
+  RagSource,
+  ServerSyncStatus,
+  SessionRecord,
+  SessionsBackupPayload,
+  SseDataLine
+} from "./types";
+import { getApiBase } from "./apiBase";
+import { fetchServerSessions, putServerSessions } from "./sessionSync";
 
-// 流式请求仍直连后端 3000，见 apiBase.js
+// 流式请求仍直连后端 3000，见 apiBase.ts
 
 // 预置几个模型名称，你可以按自己 key 支持的模型改
-const models = ["gpt-4o-mini", "deepseek-chat", "qwen-plus"];
+const models = ["gpt-4o-mini", "deepseek-chat", "qwen-plus"] as const;
 
 // 预置 Prompt 模板，方便你快速切换业务场景
-const promptTemplates = [
+const promptTemplates: PromptTemplate[] = [
   { label: "通用助手", value: "你是一个专业、简洁、可靠的中文 AI 助手。" },
   { label: "短视频脚本", value: "你是短视频编导，请按钩子-正文-结尾行动号召输出。" },
   { label: "SEO 写作", value: "你是 SEO 编辑，请输出结构化内容并兼顾可读性与关键词。" },
@@ -184,16 +272,19 @@ const promptTemplates = [
 ];
 
 // 消息列表，角色分为 user / assistant
-const messages = ref([]);
+const messages = ref<ChatMessage[]>([]);
 
 // 当前输入框内容
 const inputText = ref("");
 
 // 当前选择模型
-const selectedModel = ref(models[0]);
+const selectedModel = ref<string>(models[0]);
 
 // 当前系统提示词
 const systemPrompt = ref(promptTemplates[0].value);
+
+/** 与「快速选择 Prompt 模板」下拉同步（仅 UI，切换会话时不必与 systemPrompt 严格一致） */
+const templatePickerValue = ref(promptTemplates[0].value);
 
 // 标记当前是否正在生成中
 const isGenerating = ref(false);
@@ -202,7 +293,7 @@ const isGenerating = ref(false);
 const useRag = ref(false);
 
 // 上传文件相关状态
-const selectedFile = ref(null);
+const selectedFile = ref<File | null>(null);
 const uploadingFile = ref(false);
 const ragStatusText = ref("");
 const ragMatchHint = ref("");
@@ -216,12 +307,13 @@ const ACTIVE_SESSION_STORAGE_KEY = "ai-copilot-active-session-v1";
 /** 侧栏展示顺序（仅 id 列表，与 sessions 数组顺序无关） */
 const SESSION_ORDER_STORAGE_KEY = "ai-copilot-session-order-v1";
 
-const sessions = ref([]);
+const sessions = ref<SessionRecord[]>([]);
 const activeSessionId = ref("");
-const sessionSidebarOrder = ref([]);
+const sessionSidebarOrder = ref<string[]>([]);
 
 /** P1：与服务端 SQLite 同步状态（仅展示） */
-const serverSyncStatus = ref("idle");
+const serverSyncStatus = ref<ServerSyncStatus>("idle");
+
 const serverSyncHint = computed(() => {
   switch (serverSyncStatus.value) {
     case "loading":
@@ -255,8 +347,9 @@ const displaySessions = computed(() => {
   return [...ordered, ...rest];
 });
 
-// 侧栏展示用：当前选中的本地文件名（实际上传逻辑仍在下方 onFileChange / uploadRagFile）
+// 主区展示用：当前选中的本地文件名（实际上传逻辑仍在下方 onFileChange / uploadRagFile）
 const selectedFileName = computed(() => selectedFile.value?.name?.trim() || "");
+const hasSelectedRagFile = computed(() => !!selectedFileName.value?.trim());
 
 function generateSessionId() {
   return typeof crypto !== "undefined" && crypto.randomUUID
@@ -302,7 +395,7 @@ function ensureSessionOrderConsistency() {
 }
 
 // 把整个 sessions + 侧栏顺序 + 当前选中 id 写回本地；可选跳过服务端防抖上传
-function saveSessionsToStorage(options = {}) {
+function saveSessionsToStorage(options: { skipServer?: boolean } = {}) {
   try {
     localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions.value));
     localStorage.setItem(SESSION_ORDER_STORAGE_KEY, JSON.stringify(sessionSidebarOrder.value));
@@ -315,7 +408,7 @@ function saveSessionsToStorage(options = {}) {
   }
 }
 
-let serverSyncTimer = null;
+let serverSyncTimer: ReturnType<typeof setTimeout> | null = null;
 
 function scheduleServerSync() {
   if (serverSyncTimer) clearTimeout(serverSyncTimer);
@@ -325,12 +418,13 @@ function scheduleServerSync() {
   }, 650);
 }
 
-function normalizeServerSession(s) {
+function normalizeServerSession(s: Partial<SessionRecord> & { id: string }): SessionRecord {
+  const rawMessages = Array.isArray(s.messages) ? s.messages : [];
   return {
     id: s.id,
     title: s.title || "新会话",
     titleLocked: !!s.titleLocked,
-    messages: Array.isArray(s.messages) ? s.messages : [],
+    messages: rawMessages as ChatMessage[],
     updatedAt: Number(s.updatedAt) || Date.now(),
     systemPrompt: s.systemPrompt,
     selectedModel: s.selectedModel
@@ -355,8 +449,9 @@ async function hydrateFromServer() {
   serverSyncStatus.value = "loading";
   try {
     const data = await fetchServerSessions();
-    if (data.sessions?.length > 0) {
-      sessions.value = data.sessions.map(normalizeServerSession);
+    const serverSessions = data.sessions;
+    if (serverSessions && serverSessions.length > 0) {
+      sessions.value = serverSessions.map(normalizeServerSession);
       sessionSidebarOrder.value = Array.isArray(data.sessionOrder)
         ? data.sessionOrder.filter((id) => typeof id === "string")
         : [];
@@ -433,12 +528,15 @@ function persistCurrentSession() {
 }
 
 // 根据会话 id 把数据灌回界面（切换会话时调用）
-function applySessionToUI(sessionId) {
+function applySessionToUI(sessionId: string) {
   const s = sessions.value.find((x) => x.id === sessionId);
   if (!s) return;
   messages.value = JSON.parse(JSON.stringify(s.messages || []));
   systemPrompt.value = s.systemPrompt ?? promptTemplates[0].value;
-  selectedModel.value = s.selectedModel && models.includes(s.selectedModel) ? s.selectedModel : models[0];
+  selectedModel.value =
+    s.selectedModel && (models as readonly string[]).includes(s.selectedModel)
+      ? s.selectedModel
+      : models[0];
   ragMatchHint.value = "";
 }
 
@@ -465,7 +563,7 @@ function createNewSession() {
 }
 
 // 点击左侧某条会话：先落盘当前，再切换
-function switchSession(id) {
+function switchSession(id: string) {
   if (id === activeSessionId.value || isGenerating.value) return;
   persistCurrentSession();
   activeSessionId.value = id;
@@ -474,9 +572,9 @@ function switchSession(id) {
 }
 
 // 删除一条会话；至少保留一条
-function deleteSession(id) {
+function deleteSession(id: string) {
   if (sessions.value.length <= 1) {
-    alert("至少保留一个会话");
+    ElMessage.warning("至少保留一个会话");
     return;
   }
   const idx = sessions.value.findIndex((s) => s.id === id);
@@ -491,7 +589,7 @@ function deleteSession(id) {
 }
 
 // 侧栏重命名：锁定标题，避免随后 persist 用首条用户消息顶掉
-function onRenameSession({ id, title }) {
+function onRenameSession({ id, title }: { id: string; title: string }) {
   const t = String(title || "").trim().slice(0, 60) || "新会话";
   const idx = sessions.value.findIndex((s) => s.id === id);
   if (idx === -1) return;
@@ -505,7 +603,7 @@ function onRenameSession({ id, title }) {
 }
 
 // 拖拽后的 id 顺序（由 ChatSidebar 根据当前展示列表算出）
-function reorderSessions(newOrderIds) {
+function reorderSessions(newOrderIds: string[]) {
   const set = new Set(sessions.value.map((s) => s.id));
   const valid = newOrderIds.filter((id) => set.has(id));
   for (const s of sessions.value) {
@@ -533,16 +631,20 @@ function exportSessionsBackup() {
 }
 
 // 从备份文件恢复（会替换当前浏览器里的会话数据）
-async function importSessionsBackup(file) {
+async function importSessionsBackup(file: File | undefined) {
   if (!file) return;
   try {
     const text = await file.text();
-    const data = JSON.parse(text);
+    const data = JSON.parse(text) as SessionsBackupPayload;
     if (!Array.isArray(data.sessions) || data.sessions.length === 0) {
-      alert("文件里没有有效的 sessions 数组");
+      ElMessage.error("文件里没有有效的 sessions 数组");
       return;
     }
-    if (!confirm("将用备份替换当前所有会话与顺序，确定吗？")) return;
+    await ElMessageBox.confirm("将用备份替换当前所有会话与顺序，确定吗？", "提示", {
+      confirmButtonText: "确定",
+      cancelButtonText: "取消",
+      type: "warning"
+    });
     sessions.value = data.sessions;
     sessionSidebarOrder.value = Array.isArray(data.sessionOrder)
       ? data.sessionOrder.filter((id) => typeof id === "string")
@@ -554,9 +656,10 @@ async function importSessionsBackup(file) {
     applySessionToUI(activeSessionId.value);
     saveSessionsToStorage();
     await pushSessionsToServer();
-  } catch (e) {
+  } catch (e: unknown) {
+    if (e === "cancel" || e === "close") return;
     console.warn("[导入备份] 失败", e);
-    alert(`导入失败：${String(e)}`);
+    ElMessage.error(`导入失败：${String(e)}`);
   }
 }
 
@@ -569,15 +672,31 @@ onMounted(async () => {
 
 // 请求监控面板：展开状态、日志列表与汇总
 const showLogPanel = ref(false);
-const logs = ref([]);
-const logsSummary = ref(null);
+const logs = ref<ChatLogEntry[]>([]);
+const logsSummary = ref<LogsSummary | null>(null);
+
+/** 请求监控汇总卡片（供模板 v-for） */
+const obsSummaryCells = computed(() => {
+  const s = logsSummary.value;
+  if (!s) return [];
+  const ragLine = `${s.ragRequestCount} 次 / ${s.ragHitRequestCount} 次命中${
+    s.ragHitRate != null ? `（命中率 ${s.ragHitRate}%）` : ""
+  }`;
+  return [
+    { k: "成功 / 失败", v: `${s.successCount} / ${s.errorCount}` },
+    { k: "平均耗时", v: `${s.avgElapsedMs} ms` },
+    { k: "累计输出 token", v: String(s.totalOutputTokens) },
+    { k: "粗算总成本 USD", v: `~${s.totalEstimatedCostUsd}` },
+    { k: "RAG 请求 / 命中资料", v: ragLine }
+  ];
+});
 
 // 流式调试：页面内 + console，便于对照后端终端 [stream-demo ...] 日志
 const showStreamDebug = ref(false);
-const streamDebugLines = ref([]);
+const streamDebugLines = ref<string[]>([]);
 const MAX_STREAM_DEBUG = 80;
 
-function pushStreamDebug(line) {
+function pushStreamDebug(line: string) {
   const t = new Date().toISOString().slice(11, 23);
   const full = `[${t}] ${line}`;
   streamDebugLines.value.unshift(full);
@@ -595,7 +714,7 @@ function clearStreamDebug() {
 
 // 流式追加一个字：用「固定下标」splice 替换整条消息，触发 Vue 更新。
 // 注意：不能用 indexOf(旧对象)——第一次 splice 后旧引用已不在数组里，indexOf 永远是 -1，只会显示第一个字。
-function appendStreamToken(assistantIndex, token) {
+function appendStreamToken(assistantIndex: number, token: string) {
   const list = messages.value;
   const msg = list[assistantIndex];
   if (!msg || msg.role !== "assistant") return;
@@ -606,7 +725,7 @@ function appendStreamToken(assistantIndex, token) {
 }
 
 // 只更新助手消息里的 sources（仍用下标，读当前数组里的对象）
-function setAssistantSources(assistantIndex, sources) {
+function setAssistantSources(assistantIndex: number, sources: RagSource[]) {
   const list = messages.value;
   const msg = list[assistantIndex];
   if (!msg || msg.role !== "assistant") return;
@@ -614,7 +733,7 @@ function setAssistantSources(assistantIndex, sources) {
 }
 
 // 用于中断请求（点击“停止生成”时调用）
-let currentAbortController = null;
+let currentAbortController: AbortController | null = null;
 
 // 切换请求监控面板显示/隐藏
 function toggleLogPanel() {
@@ -626,7 +745,7 @@ function toggleLogPanel() {
 async function fetchLogs() {
   try {
     const res = await fetch(`${getApiBase()}/api/logs`);
-    const data = await res.json();
+    const data = (await res.json()) as LogsApiResponse;
     if (data?.ok && Array.isArray(data.logs)) logs.value = data.logs;
     logsSummary.value = data?.summary || null;
   } catch {
@@ -635,10 +754,16 @@ async function fetchLogs() {
   }
 }
 
-// 选择上传文件：这里只记录文件对象，实际读取在上传时进行
-function onFileChange(event) {
-  const file = event?.target?.files?.[0] || null;
+// 选择上传文件：这里只记录文件对象，实际读取在上传时进行（与主区 el-upload 合成事件一致）
+function onFileChange(event: { target: { files: File[] } }) {
+  const file = event.target.files[0] ?? null;
   selectedFile.value = file;
+}
+
+function onRagUploadChange(uploadFile: UploadFile) {
+  const raw = uploadFile.raw;
+  if (!raw) return;
+  onFileChange({ target: { files: [raw] } });
 }
 
 // 上传 txt/md 到后端 RAG（SQLite 持久化 + 内存索引）
@@ -747,7 +872,7 @@ async function sendMessage() {
 
         try {
           // 每一行 data: 后面都是 JSON 事件
-          const event = JSON.parse(line.slice(5).trim());
+          const event = JSON.parse(line.slice(5).trim()) as SseDataLine;
 
           // token：flushSync 同步刷 DOM，否则长循环里更新会攒到最后才显示
           if (event.type === "token" && event.token) {
@@ -768,9 +893,10 @@ async function sendMessage() {
           // error 事件显示错误信息
           if (event.type === "error") {
             const m = messages.value[assistantIndex];
+            const errMsg = typeof event.message === "string" ? event.message : "";
             messages.value.splice(assistantIndex, 1, {
               ...m,
-              content: (m.content || "") + `\n[错误] ${event.message}`
+              content: (m.content || "") + `\n[错误] ${errMsg}`
             });
           }
         } catch {
@@ -803,7 +929,7 @@ function stopGenerating() {
 }
 
 // 点击模板后，直接替换系统提示词
-function applyTemplate(value) {
+function applyTemplate(value: string) {
   systemPrompt.value = value;
 }
 
@@ -865,7 +991,7 @@ async function runStreamDemo() {
         const line = rawLine.trim();
         if (!line.startsWith("data:")) continue;
         try {
-          const event = JSON.parse(line.slice(5).trim());
+          const event = JSON.parse(line.slice(5).trim()) as SseDataLine;
           if (event.type === "token" && event.token) {
             tokenCount += 1;
             if (tokenCount <= 5) {

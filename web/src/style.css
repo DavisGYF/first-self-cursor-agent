@@ -13,18 +13,22 @@ body {
 #app {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 12px 16px 16px;
+  min-height: 100vh;
+  box-sizing: border-box;
 }
 
 /* 主区 + 左侧会话列表 */
 .app-layout {
   display: flex;
-  gap: 16px;
-  align-items: flex-start;
+  gap: 12px;
+  align-items: stretch;
+  min-height: calc(100vh - 28px);
 }
 
 .session-sidebar {
-  flex: 0 0 220px;
+  flex: 0 0 288px;
+  min-width: 0;
   background: #fff;
   border: 1px solid #e6e8ef;
   border-radius: 12px;
@@ -68,50 +72,14 @@ body {
   margin-bottom: 10px;
 }
 
-.sidebar-file-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.sidebar-file-input {
-  width: 100%;
-  padding: 8px;
-  font-size: 12px;
-}
-
-.sidebar-file-name {
-  margin: 8px 0 0;
-  font-size: 11px;
-  color: #475569;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sidebar-rag-status {
-  margin: 8px 0 0;
-  font-size: 11px;
-  line-height: 1.4;
-  color: #0369a1;
-}
-
 .sidebar-backup-row {
   display: flex;
   gap: 8px;
   margin-bottom: 10px;
 }
 
-.sidebar-secondary-btn {
+.sidebar-backup-row .sidebar-backup-btn {
   flex: 1;
-  padding: 8px 6px;
-  font-size: 12px;
-  background: #f1f5f9;
-  color: #334155;
-}
-
-.sidebar-secondary-btn:hover {
-  background: #e2e8f0;
 }
 
 .sidebar-hidden-input {
@@ -174,24 +142,15 @@ body {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
-.session-rename-btn {
-  padding: 4px 6px;
-  font-size: 11px;
-  background: #e0e7ff;
-  color: #3730a3;
-}
-
-.session-rename-btn:hover {
-  background: #c7d2fe;
+.session-icon-btn {
+  padding: 4px !important;
 }
 
 .session-rename-input {
   width: 100%;
-  padding: 4px 6px;
-  font-size: 12px;
 }
 
 .session-item:hover {
@@ -209,41 +168,416 @@ body {
 }
 
 .session-title {
-  flex: 1;
+  display: block;
+  min-width: 0;
+  width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.session-del {
-  flex-shrink: 0;
-  padding: 4px 8px;
-  font-size: 12px;
-  background: #fee2e2;
-  color: #b91c1c;
-}
-
-.session-del:hover {
-  background: #fecaca;
-}
-
 .main-column {
   flex: 1;
   min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-.panel {
-  background: #fff;
-  border: 1px solid #e6e8ef;
+/* 主区：Element Plus el-card — 撑满主列高度，便于上下约 50/50 分区 */
+.panel-card {
+  --panel-card-body-padding-x: 18px;
   border-radius: 12px;
-  padding: 16px;
-  box-shadow: 0 4px 12px rgba(19, 33, 68, 0.04);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-card .el-card__header {
+  padding: 10px 16px;
+  flex-shrink: 0;
+}
+
+.panel-card :deep(.el-card__body) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 8px var(--panel-card-body-padding-x) 12px;
+}
+
+/* 主卡片内：上两块（说明+表单）≈50% 视口，对话区 ≈50% */
+.panel-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+
+.panel-top-group {
+  flex: 0 1 50%;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panel-section {
+  --panel-section-pad-x: 14px;
+  margin: 0;
+  padding: 10px var(--panel-section-pad-x) 12px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: transparent;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 4px 12px rgba(15, 23, 42, 0.04);
+}
+
+.panel-intro-sub {
+  margin-bottom: 0 !important;
+}
+
+.panel-section--conversation {
+  flex: 1 1 50%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  /* 中间对话块固定高度、内部滚动；整块区过长时再滚（如展开监控卡片） */
+  overflow-y: auto;
+}
+
+/* 对话区：上 RAG/提示 → 中间固定高度消息框（内部滚动）→ 下输入+按钮永远贴底、不被长对话顶走 */
+.conversation-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 0 0 auto;
+  width: 100%;
+  align-self: stretch;
+}
+
+/* 同一行：左勾选、右知识库列（说明只在右列下方） */
+.rag-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+  width: 100%;
+}
+
+.rag-toolbar-checkbox {
+  margin: 0;
+}
+
+/* 右侧：知识库控件 + 下方说明，整体右对齐 */
+.rag-kb-column {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex: 1 1 280px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.rag-kb-inline {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  width: 100%;
+}
+
+/* 标签 + 两个按钮同一行，彼此垂直居中 */
+.rag-kb-inline-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 12px;
+  width: 100%;
+}
+
+.rag-kb-label {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--el-text-color-primary, #303133);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+}
+
+.rag-kb-controls {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.rag-kb-upload {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.rag-kb-upload :deep(.el-upload) {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.rag-kb-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 12px;
+  width: 100%;
+  text-align: right;
+}
+
+.rag-kb-file-name {
+  font-size: 11px;
+  color: #475569;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: min(100%, 280px);
+}
+
+.rag-kb-status {
+  line-height: 1.4;
+}
+
+.rag-kb-hint {
+  margin: 0;
+  width: 100%;
+  max-width: 420px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #64748b;
+  text-align: right;
+}
+
+.conversation-footer {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.conversation-actions {
+  flex-shrink: 0;
+}
+
+/*
+ * 消息列表：固定高度，不随消息变多变高；多出来的只在框内上下滚动
+ * clamp：小屏不低于 200px，大屏约 40% 视口高，上限 520px
+ */
+.conversation-messages-grow {
+  flex: 0 0 auto;
+  height: clamp(200px, 40vh, 520px);
+  max-height: clamp(200px, 40vh, 520px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.messages-scrollbar {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+.messages-scrollbar-fill {
+  height: 100%;
+  min-height: 0;
+}
+
+.messages-scrollbar-fill :deep(.el-scrollbar) {
+  height: 100%;
+}
+
+.messages-scrollbar-fill :deep(.el-scrollbar__wrap) {
+  overflow-y: auto !important;
+  max-height: none !important;
+}
+
+.card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .title {
   font-size: 20px;
   font-weight: 700;
+  margin: 0;
+}
+
+.subtitle-block {
+  display: block;
+  line-height: 1.55;
+}
+
+.subtitle-tight {
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+
+/* 大模型 / 场景模板 / 系统提示词：左标签 + 右控件 */
+.settings-form {
+  margin-bottom: 0;
+}
+
+.settings-form :deep(.el-form-item) {
+  margin-bottom: 8px;
+  align-items: center;
+}
+
+.settings-form :deep(.el-form-item:last-child) {
+  margin-bottom: 0;
+}
+
+/* 大模型 + 场景模板：同一行（窄屏自动换行） */
+.settings-form-row {
+  margin-bottom: 8px;
+}
+
+.settings-form-row :deep(.el-form-item) {
+  margin-bottom: 0;
+}
+
+@media (max-width: 767px) {
+  .settings-form-row .el-col:first-child :deep(.el-form-item) {
+    margin-bottom: 8px;
+  }
+}
+
+.settings-form :deep(.el-form-item.settings-form-item--textarea) {
+  align-items: flex-start;
+}
+
+.settings-form :deep(.el-form-item__label) {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: 0.02em;
+  line-height: 32px;
+  height: auto;
+  padding-right: 12px;
+  margin-right: 4px;
+  justify-content: flex-end;
+  border-right: 1px solid var(--el-border-color);
+  box-sizing: border-box;
+}
+
+.settings-form :deep(.settings-form-item--textarea .el-form-item__label) {
+  line-height: 1.45;
+  padding-top: 7px;
+}
+
+.settings-form :deep(.el-form-item__content) {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-form :deep(.el-form-item__content .el-input__inner),
+.settings-form :deep(.el-form-item__content .el-textarea__inner) {
+  font-weight: 400;
+  color: var(--el-text-color-regular);
+}
+
+.settings-form-control {
+  width: 100%;
+}
+
+.main-form-space {
+  margin-top: 0;
+  width: 100%;
+}
+
+/* 已用 .conversation-layout 替代主区 el-space，保留类名避免其它引用报错 */
+
+.inline-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.92em;
+  background: var(--el-fill-color-light);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--el-text-color-regular);
+}
+
+/* 对话区域：在「对话与操作」色块内横向拉满，仅保留内侧间隙 */
+.chat-messages-fullbleed {
+  width: calc(100% + 2 * var(--panel-section-pad-x));
+  max-width: none;
+  margin-left: calc(-1 * var(--panel-section-pad-x));
+  margin-right: calc(-1 * var(--panel-section-pad-x));
+  padding-left: 12px;
+  padding-right: 12px;
+  box-sizing: border-box;
+  min-height: 0;
+}
+
+.messages-scrollbar {
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.messages-inner {
+  padding: 10px 12px 12px;
+  min-height: 0;
+}
+
+.stream-debug-card {
+  margin-top: 8px;
+  flex-shrink: 0;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06) !important;
+}
+
+.stream-debug-pre {
   margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.obs-card-wrap {
+  margin-top: 8px;
+  flex-shrink: 0;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06) !important;
+}
+
+.obs-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.obs-stat-card {
+  min-height: 72px;
+}
+
+.obs-stat-card .obs-card-k {
+  margin-bottom: 6px;
 }
 
 .subtitle {
@@ -267,16 +601,11 @@ body {
   margin-bottom: 12px;
 }
 
-input,
-select,
-textarea,
-button {
+/* 仅作用于非 Element 封装控件，避免覆盖 .el-input__inner 等 */
+input:not(.el-input__inner):not([type="hidden"]),
+select:not(.el-select__input),
+textarea:not(.el-textarea__inner) {
   font-size: 14px;
-}
-
-input,
-select,
-textarea {
   width: 100%;
   border: 1px solid #d9deea;
   border-radius: 8px;
@@ -284,28 +613,12 @@ textarea {
   background: #fff;
 }
 
-button {
-  border: none;
-  border-radius: 8px;
-  padding: 10px 14px;
-  cursor: pointer;
-  background: #2563eb;
-  color: #fff;
-}
-
-button:disabled {
-  background: #9aa8cb;
-  cursor: not-allowed;
-}
-
 .messages {
-  border: 1px solid #e6e8ef;
-  border-radius: 10px;
-  padding: 12px;
-  min-height: 260px;
-  max-height: 460px;
-  overflow: auto;
-  background: #fcfdff;
+  min-height: 0;
+  overflow: visible;
+  background: transparent;
+  border: none;
+  padding: 0;
 }
 
 .msg {

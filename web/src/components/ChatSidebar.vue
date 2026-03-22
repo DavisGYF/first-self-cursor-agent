@@ -3,10 +3,12 @@
   <aside class="session-sidebar chat-app-sidebar">
     <section class="sidebar-section" aria-label="历史会话">
       <h2>历史会话</h2>
-      <p v-if="serverSyncHint" class="sidebar-server-sync">{{ serverSyncHint }}</p>
+      <el-text v-if="serverSyncHint" size="small" type="info" class="sidebar-server-sync" tag="p">
+        {{ serverSyncHint }}
+      </el-text>
       <div class="sidebar-backup-row">
-        <button type="button" class="sidebar-secondary-btn" @click="emit('export-backup')">导出备份</button>
-        <button type="button" class="sidebar-secondary-btn" @click="triggerImport">导入备份</button>
+        <el-button size="small" class="sidebar-backup-btn" @click="emit('export-backup')">导出备份</el-button>
+        <el-button size="small" class="sidebar-backup-btn" @click="triggerImport">导入备份</el-button>
       </div>
       <input
         ref="importInputRef"
@@ -15,15 +17,17 @@
         class="sidebar-hidden-input"
         @change="onImportFile"
       />
-      <button
-        type="button"
+      <el-button
+        type="primary"
         class="sidebar-btn-block"
         :disabled="isGenerating"
         @click="emit('create-session')"
       >
         ＋ 新建会话
-      </button>
-      <p class="sidebar-hint sidebar-hint-tight">拖动左侧 ⋮⋮ 排序；双击标题或点「名」重命名。</p>
+      </el-button>
+      <p class="sidebar-hint sidebar-hint-tight">
+        拖动左侧 ⋮⋮ 排序；双击标题或点铅笔进入重命名，再点 ✓ 确认。
+      </p>
       <div
         v-for="(s, index) in sessions"
         :key="s.id"
@@ -43,11 +47,12 @@
         >
         <div class="session-main" @click="onRowClick(s.id)">
           <template v-if="editingId === s.id">
-            <input
+            <el-input
               ref="renameInputRef"
               v-model="editingTitle"
               class="session-rename-input"
               maxlength="60"
+              size="small"
               @click.stop
               @blur="commitRename(s)"
               @keydown.enter.prevent="commitRename(s)"
@@ -57,134 +62,126 @@
           <span v-else class="session-title" :title="s.title" @dblclick.stop="startRename(s)">{{ s.title }}</span>
         </div>
         <div class="session-actions" @click.stop>
-          <button type="button" class="session-rename-btn" title="重命名" @click="startRename(s)">名</button>
-          <button type="button" class="session-del" @click="emit('delete-session', s.id)">删</button>
+          <el-tooltip v-if="editingId !== s.id" content="重命名" placement="top">
+            <el-button
+              class="session-icon-btn"
+              type="primary"
+              :icon="EditPen"
+              circle
+              size="small"
+              plain
+              @click="startRename(s)"
+            />
+          </el-tooltip>
+          <el-tooltip v-else content="确认名称" placement="top">
+            <el-button
+              class="session-icon-btn"
+              type="success"
+              :icon="Check"
+              circle
+              size="small"
+              @mousedown.prevent
+              @click="commitRename(s)"
+            />
+          </el-tooltip>
+          <el-tooltip v-if="editingId !== s.id" content="删除会话" placement="top">
+            <el-button
+              class="session-icon-btn"
+              type="danger"
+              :icon="Delete"
+              circle
+              size="small"
+              plain
+              @click="emit('delete-session', s.id)"
+            />
+          </el-tooltip>
         </div>
       </div>
-    </section>
-
-    <div class="sidebar-divider" role="separator" />
-
-    <section class="sidebar-section" aria-label="知识库文件">
-      <h2>知识库文件</h2>
-      <p class="sidebar-hint">上传 .txt / .md 至后端知识库（持久化存储），主区勾选「启用 RAG」后参与检索。</p>
-      <div class="sidebar-file-stack">
-        <input
-          type="file"
-          accept=".txt,.md,text/plain,text/markdown"
-          class="sidebar-file-input"
-          @change="onFileInput"
-        />
-        <button type="button" :disabled="!hasSelectedFile || uploadingFile" @click="emit('upload-click')">
-          {{ uploadingFile ? "上传中..." : "上传知识库文件" }}
-        </button>
-      </div>
-      <p v-if="selectedFileName" class="sidebar-file-name" :title="selectedFileName">
-        已选：{{ selectedFileName }}
-      </p>
-      <p v-if="ragStatusText" class="sidebar-rag-status">{{ ragStatusText }}</p>
     </section>
   </aside>
 </template>
 
-<script setup>
-import { ref, computed, nextTick } from "vue";
+<script setup lang="ts">
+import { ref, nextTick } from "vue";
+import type { InputInstance } from "element-plus";
+import type { SessionRecord } from "../types";
+import { EditPen, Check, Delete } from "@element-plus/icons-vue";
 
-const props = defineProps({
-  /** 父组件已按侧栏顺序排好的会话列表 */
-  sessions: {
-    type: Array,
-    default: () => []
-  },
-  activeSessionId: {
-    type: String,
-    default: ""
-  },
-  isGenerating: {
-    type: Boolean,
-    default: false
-  },
-  uploadingFile: {
-    type: Boolean,
-    default: false
-  },
-  selectedFileName: {
-    type: String,
-    default: ""
-  },
-  ragStatusText: {
-    type: String,
-    default: ""
-  },
-  /** P1：服务端 SQLite 同步状态文案（由 App.vue 传入） */
-  serverSyncHint: {
-    type: String,
-    default: ""
+const props = withDefaults(
+  defineProps<{
+    /** 父组件已按侧栏顺序排好的会话列表 */
+    sessions: SessionRecord[];
+    activeSessionId: string;
+    isGenerating: boolean;
+    /** P1：服务端 SQLite 同步状态文案（由 App.vue 传入） */
+    serverSyncHint: string;
+  }>(),
+  {
+    sessions: () => [],
+    activeSessionId: "",
+    isGenerating: false,
+    serverSyncHint: ""
   }
-});
+);
 
-const emit = defineEmits([
-  "create-session",
-  "switch-session",
-  "delete-session",
-  "rename-session",
-  "reorder-sessions",
-  "export-backup",
-  "import-backup",
-  "file-change",
-  "upload-click"
-]);
+const emit = defineEmits<{
+  "create-session": [];
+  "switch-session": [id: string];
+  "delete-session": [id: string];
+  "rename-session": [payload: { id: string; title: string }];
+  "reorder-sessions": [ids: string[]];
+  "export-backup": [];
+  "import-backup": [file: File];
+}>();
 
-const hasSelectedFile = computed(() => !!props.selectedFileName?.trim());
-
-const importInputRef = ref(null);
-const renameInputRef = ref(null);
-const editingId = ref(null);
+const importInputRef = ref<HTMLInputElement | null>(null);
+const renameInputRef = ref<InputInstance | null>(null);
+const editingId = ref<string | null>(null);
 const editingTitle = ref("");
-const dragFromIndex = ref(null);
+const dragFromIndex = ref<number | null>(null);
 
 function triggerImport() {
-  importInputRef.value?.click?.();
+  importInputRef.value?.click();
 }
 
-function onImportFile(event) {
-  const file = event?.target?.files?.[0] || null;
+function onImportFile(event: Event) {
+  const t = event.target as HTMLInputElement;
+  const file = t.files?.[0] ?? null;
   if (file) emit("import-backup", file);
-  event.target.value = "";
+  t.value = "";
 }
 
-function onFileInput(event) {
-  emit("file-change", event);
-}
-
-function onRowClick(id) {
+function onRowClick(id: string) {
   if (editingId.value) return;
   emit("switch-session", id);
 }
 
-async function startRename(s) {
+async function startRename(s: SessionRecord) {
   editingId.value = s.id;
   editingTitle.value = s.title || "";
   await nextTick();
-  renameInputRef.value?.focus?.();
-  renameInputRef.value?.select?.();
+  const inst = renameInputRef.value;
+  if (inst && typeof inst.focus === "function") {
+    inst.focus();
+    inst.select?.();
+  }
 }
 
 function cancelRename() {
   editingId.value = null;
 }
 
-function commitRename(s) {
+function commitRename(s: SessionRecord) {
   if (editingId.value !== s.id) return;
   emit("rename-session", { id: s.id, title: editingTitle.value });
   editingId.value = null;
 }
 
-function onDragStart(_event, index) {
+function onDragStart(_event: DragEvent, index: number) {
   dragFromIndex.value = index;
 }
 
-function onDrop(toIndex) {
+function onDrop(toIndex: number) {
   const from = dragFromIndex.value;
   dragFromIndex.value = null;
   if (from == null || from === toIndex) return;
