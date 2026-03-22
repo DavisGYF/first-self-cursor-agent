@@ -6,6 +6,16 @@
 - Express 后端
 - 兼容 OpenAI 的流式接口（SSE）
 - 模型切换 + Prompt 模板 + 停止生成
+- 历史会话（浏览器 `localStorage`，后端不落库）
+- 左侧 `ChatSidebar`：历史会话 + 知识库文件上传
+
+---
+
+## 历史会话说明
+
+- 会话列表、消息、系统提示与所选模型会保存在本机浏览器（键名如 `ai-copilot-sessions-v1`）。
+- **换浏览器 / 清缓存会丢数据**；若要多端同步或登录用户维度存储，需再接入后端 API + 数据库（当前 `server` 未提供 `/api/sessions`）。
+- 侧栏组件：`web/src/components/ChatSidebar.vue`；主逻辑仍在 `web/src/App.vue`。
 
 ---
 
@@ -61,6 +71,7 @@ npm run dev
 - 修改默认模型：`server/.env` 里的 `DEFAULT_MODEL`
 - 修改模型下拉：`web/src/App.vue` 里的 `models`
 - 修改 Prompt 模板：`web/src/App.vue` 里的 `promptTemplates`
+- 调整侧栏 UI：`web/src/components/ChatSidebar.vue` + `web/src/style.css`
 - 修改后端转发地址：`server/.env` 里的 `OPENAI_BASE_URL`
 
 ---
@@ -81,7 +92,8 @@ npm run dev
 
 ## 6. 下一步建议（你半个月版本）
 
-- 接入文件上传 + RAG 检索
-- 增加 token/成本统计面板
-- 增加会话持久化（SQLite/Postgres）
+- RAG 已可上传；可继续做：分块策略优化、向量库、引用质量评估
+- 增加 token/成本统计面板（前后端埋点）
+- **服务端会话**：REST + SQLite/Postgres（与现有浏览器会话并存或迁移）
 - 增加工具调用（搜索/数据库查询）
+- 侧栏：会话重命名、拖拽排序、导出/导入 JSON 备份
