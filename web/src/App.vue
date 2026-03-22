@@ -21,12 +21,14 @@
 
     <div class="main-column">
   <div class="panel">
-    <h1 class="title">AI Copilot Demo（Vue + Express）</h1>
-    <p class="subtitle">这是你的学习版项目：支持对话、流式输出、RAG 上传与引用展示。</p>
+    <h1 class="title">AI Copilot 全栈示例（Vue + Express）</h1>
+    <p class="subtitle">
+      功能概览：多模型对话、SSE 流式输出、会话管理（本地缓存 + 服务端同步）、知识库 RAG（段落分块 / BM25 或可选向量）、引用来源展示、请求监控与成本估算。
+    </p>
     <p class="subtitle" style="font-size: 12px; color: #64748b;">
-      开发时流式已直连后端 3000（避免 Vite 代理缓冲 SSE）。确认服务：浏览器打开
+      开发环境下流式请求直连后端 <code style="font-size: 11px;">localhost:3000</code>，避免 Vite 代理缓冲 SSE。健康检查：
       <a href="http://localhost:3000/api/health" target="_blank">/api/health</a>
-      ，看 startedAt 是否在重启后变化。
+      （<code>startedAt</code> 随进程重启变化）。
     </p>
 
     <div class="row">
@@ -86,7 +88,7 @@
       <button :disabled="isGenerating" @click="sendMessage">发送</button>
       <button :disabled="!isGenerating" @click="stopGenerating">停止生成</button>
       <button :disabled="isGenerating" @click="runStreamDemo">流式测试</button>
-      <button @click="toggleLogPanel">{{ showLogPanel ? "收起日志" : "查看日志" }}</button>
+      <button @click="toggleLogPanel">{{ showLogPanel ? "收起监控" : "请求监控" }}</button>
       <label style="display: flex; align-items: center; gap: 6px; font-size: 13px;">
         <input v-model="showStreamDebug" type="checkbox" />
         显示流式调试（页面 + 浏览器控制台 F12）
@@ -100,11 +102,12 @@
       <button type="button" @click="clearStreamDebug">清空</button>
     </div>
 
-    <!-- P3 可观测：汇总 + 明细（简历/面试：耗时、token、RAG 命中率、粗算成本） -->
+    <!-- P3：请求监控 — 汇总 + 明细（耗时、token、RAG 命中、成本估算） -->
     <div v-if="showLogPanel" class="source-box obs-panel" style="margin-top: 12px;">
-      <div class="source-title">请求可观测（本进程内存，重启清空）</div>
+      <div class="source-title">请求监控（进程内缓存，服务重启后清空）</div>
       <p class="obs-pitch">
-        面试可讲：每次对话打日志，汇总成功率、RAG 是否命中片段、输出 token 与粗算美元（输入 token 为 JSON 长度估算，非账单精度）。
+        <strong>功能说明：</strong>后端在每次对话流结束后写入结构化记录；此处展示汇总指标与最近明细，包括成功率、耗时、输出 token 量、按公开价目粗算的费用，以及开启 RAG
+        时是否命中知识片段。输入 token 由请求体长度估算，费用为示意值，适用于演示、排障与容量感知，不等同于账单对账。
       </p>
       <button type="button" @click="fetchLogs" style="margin-bottom: 10px;">刷新</button>
 
@@ -564,9 +567,10 @@ onMounted(async () => {
   await hydrateFromServer();
 });
 
-// 基础日志面板：是否展开、日志列表
+// 请求监控面板：展开状态、日志列表与汇总
 const showLogPanel = ref(false);
 const logs = ref([]);
+const logsSummary = ref(null);
 
 // 流式调试：页面内 + console，便于对照后端终端 [stream-demo ...] 日志
 const showStreamDebug = ref(false);
@@ -612,13 +616,13 @@ function setAssistantSources(assistantIndex, sources) {
 // 用于中断请求（点击“停止生成”时调用）
 let currentAbortController = null;
 
-// 切换日志面板显示/隐藏
+// 切换请求监控面板显示/隐藏
 function toggleLogPanel() {
   showLogPanel.value = !showLogPanel.value;
   if (showLogPanel.value) fetchLogs();
 }
 
-// 从后端拉取最近请求日志（GET /api/logs）
+// 从后端拉取监控数据（GET /api/logs：明细 + 汇总）
 async function fetchLogs() {
   try {
     const res = await fetch(`${getApiBase()}/api/logs`);
@@ -637,7 +641,7 @@ function onFileChange(event) {
   selectedFile.value = file;
 }
 
-// 上传 txt/md 到后端 RAG 内存库
+// 上传 txt/md 到后端 RAG（SQLite 持久化 + 内存索引）
 async function uploadRagFile() {
   if (!selectedFile.value || uploadingFile.value) return;
   uploadingFile.value = true;

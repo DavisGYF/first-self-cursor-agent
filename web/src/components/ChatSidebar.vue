@@ -67,7 +67,7 @@
 
     <section class="sidebar-section" aria-label="知识库文件">
       <h2>知识库文件</h2>
-      <p class="sidebar-hint">上传 .txt / .md 到后端内存 RAG，对话区勾选「启用 RAG」后生效。</p>
+      <p class="sidebar-hint">上传 .txt / .md 至后端知识库（持久化存储），主区勾选「启用 RAG」后参与检索。</p>
       <div class="sidebar-file-stack">
         <input
           type="file"
