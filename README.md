@@ -20,12 +20,12 @@
 - 侧栏体验：拖动 **⋮⋮** 排序；双击标题或 **名** 重命名（`titleLocked`）；**导出/导入 JSON** 备份。
 - 代码：`web/src/sessionSync.js`、`server/db.js`、`server/sessionsStore.js`；侧栏 UI：`web/src/components/ChatSidebar.vue`。
 
-### RAG（P2，已实现一版）
+### RAG（P2 + 持久化 / 可选向量）
 
-- **分块**：先按空行拆段落，过长再滑窗；短段会合并，减少碎片（见 `server/rag.js`）。
-- **检索**：**BM25**（无需 embedding API）；带相对阈值，弱相关片段不注入 system 上下文，降低「硬扯资料」。
-- **可调**：`server/.env` 中 `RAG_CHUNK_SIZE`、`RAG_CHUNK_OVERLAP`、`RAG_TOP_K`、`RAG_MIN_RELATIVE_SCORE`。
-- **说明**：知识块仍在**内存**，重启后端会清空；向量库/持久化属后续迭代。
+- **分块**：先按空行拆段落，过长再滑窗；短段合并（见 `server/rag.js`）。
+- **持久化**：文本块写入 **`server/data/copilot.db` 的 `rag_chunks` 表**，重启服务后**自动加载**，上传的文档不会丢（除非删库文件）。
+- **检索**：默认 **BM25**（关键词统计）；若设置 **`RAG_EMBEDDING=1`** 且配置了 **`OPENAI_API_KEY`**，上传后会写入 **embedding**，检索时优先用 **语义相似度（余弦）**，失败则回退 BM25。
+- **可调**：`RAG_CHUNK_*`、`RAG_TOP_K`、`RAG_MIN_RELATIVE_SCORE`、`RAG_EMBEDDING`、`RAG_EMBEDDING_MODEL`。
 
 ---
 

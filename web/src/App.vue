@@ -67,7 +67,7 @@
           <div class="source-title">引用来源：</div>
           <div v-for="source in msg.sources" :key="source.id" class="source-item">
             <strong>{{ source.title }} #{{ source.chunkIndex }}</strong>
-            <span v-if="source.score != null" class="source-score">（BM25 {{ source.score.toFixed(4) }}）</span>
+            <span v-if="source.score != null" class="source-score">（相关度 {{ source.score.toFixed(4) }}）</span>
             <strong>：</strong>{{ source.text }}
           </div>
         </div>

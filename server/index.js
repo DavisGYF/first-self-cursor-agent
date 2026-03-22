@@ -164,15 +164,15 @@ app.get("/api/logs", (_req, res) => {
   res.json({ ok: true, logs: [...chatLogs].reverse() });
 });
 
-// RAG 上传接口：前端把 txt/md 内容传上来，后端做切分并缓存到内存
-app.post("/api/rag/upload", (req, res) => {
+// RAG 上传接口：切分后写入 SQLite + 内存；可选 embedding（见 rag.js）
+app.post("/api/rag/upload", async (req, res) => {
   try {
     const { title = "", content = "" } = req.body || {};
     if (!String(content).trim()) {
       return res.status(400).json({ error: "content is required" });
     }
 
-    const result = ingestUpload({ title, content });
+    const result = await ingestUpload({ title, content });
 
     res.json({
       ok: true,
@@ -186,15 +186,16 @@ app.post("/api/rag/upload", (req, res) => {
   }
 });
 
-// RAG 查询接口：输入 query，返回相关性最高的前 3 段
-app.post("/api/rag/query", (req, res) => {
+// RAG 查询接口：输入 query，返回相关性最高的前若干段
+app.post("/api/rag/query", async (req, res) => {
   try {
     const { query = "", topK = 3 } = req.body || {};
     if (!String(query).trim()) {
       return res.status(400).json({ error: "query is required" });
     }
 
-    const sources = searchChunks(query, Number(topK) || 3).map((item) => ({
+    const raw = await searchChunks(query, Number(topK) || 3);
+    const sources = raw.map((item) => ({
       id: item.id,
       title: item.title,
       chunkIndex: item.chunkIndex,
@@ -244,7 +245,7 @@ app.post("/api/chat/stream", async (req, res) => {
       [...messages]
         .reverse()
         .find((item) => item?.role === "user" && item?.content)?.content || "";
-    const sources = useRag ? searchChunks(latestUserMessage, 3) : [];
+    const sources = useRag ? await searchChunks(latestUserMessage, 3) : [];
 
     // 构造发送给模型的消息：系统提示 +（可选）RAG上下文 + 用户历史消息
     const finalMessages = [];
@@ -287,7 +288,7 @@ app.post("/api/chat/stream", async (req, res) => {
           enabled: true,
           matched: sources.length > 0,
           count: sources.length,
-          retrieval: "bm25",
+          retrieval: getRagConfigSummary().retrieval,
         })}\n\n`,
       );
     }

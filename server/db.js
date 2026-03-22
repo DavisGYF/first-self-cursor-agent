@@ -37,4 +37,15 @@ db.exec(`
     client_id TEXT PRIMARY KEY,
     order_json TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS rag_chunks (
+    chunk_id TEXT PRIMARY KEY,
+    doc_id INTEGER NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    text TEXT NOT NULL,
+    embedding_json TEXT,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_rag_chunks_doc ON rag_chunks(doc_id);
 `);
