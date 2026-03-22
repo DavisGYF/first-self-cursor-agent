@@ -2,6 +2,11 @@
   <div class="panel">
     <h1 class="title">AI Copilot Demo（Vue + Express）</h1>
     <p class="subtitle">这是你的学习版项目：支持对话、流式输出、RAG 上传与引用展示。</p>
+    <p class="subtitle" style="font-size: 12px; color: #64748b;">
+      开发时流式已直连后端 3000（避免 Vite 代理缓冲 SSE）。确认服务：浏览器打开
+      <a href="http://localhost:3000/api/health" target="_blank">/api/health</a>
+      ，看 startedAt 是否在重启后变化。
+    </p>
 
     <div class="row">
       <select v-model="selectedModel">
@@ -65,7 +70,19 @@
     <div class="row">
       <button :disabled="isGenerating" @click="sendMessage">发送</button>
       <button :disabled="!isGenerating" @click="stopGenerating">停止生成</button>
+      <button :disabled="isGenerating" @click="runStreamDemo">流式测试</button>
       <button @click="toggleLogPanel">{{ showLogPanel ? "收起日志" : "查看日志" }}</button>
+      <label style="display: flex; align-items: center; gap: 6px; font-size: 13px;">
+        <input v-model="showStreamDebug" type="checkbox" />
+        显示流式调试（页面 + 浏览器控制台 F12）
+      </label>
+    </div>
+
+    <!-- 流式调试：对照后端终端日志，看「读到了几次 chunk、是否逐 token 解析」 -->
+    <div v-if="showStreamDebug" class="source-box" style="margin-top: 8px; max-height: 220px; overflow: auto;">
+      <div class="source-title">流式调试（最新在上）</div>
+      <pre style="margin: 0; font-size: 11px; line-height: 1.5; white-space: pre-wrap;">{{ streamDebugText }}</pre>
+      <button type="button" @click="clearStreamDebug">清空</button>
     </div>
 
     <!-- 基础日志面板：展示每次请求的耗时、token、错误（面试可讲：可观测性） -->
@@ -88,7 +105,13 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { ref, nextTick, computed } from "vue";
+
+// 开发环境下：Vite 的 /api 代理会缓冲 SSE，流式会「一整段才到前端」。
+// 所以流式相关请求直连后端 3000；生产环境仍用相对路径（同域部署）。
+function getApiBase() {
+  return import.meta.env.DEV ? "http://localhost:3000" : "";
+}
 
 // 预置几个模型名称，你可以按自己 key 支持的模型改
 const models = ["gpt-4o-mini", "deepseek-chat", "qwen-plus"];
@@ -128,6 +151,47 @@ const ragMatchHint = ref("");
 // 基础日志面板：是否展开、日志列表
 const showLogPanel = ref(false);
 const logs = ref([]);
+
+// 流式调试：页面内 + console，便于对照后端终端 [stream-demo ...] 日志
+const showStreamDebug = ref(false);
+const streamDebugLines = ref([]);
+const MAX_STREAM_DEBUG = 80;
+
+function pushStreamDebug(line) {
+  const t = new Date().toISOString().slice(11, 23);
+  const full = `[${t}] ${line}`;
+  streamDebugLines.value.unshift(full);
+  if (streamDebugLines.value.length > MAX_STREAM_DEBUG) {
+    streamDebugLines.value.length = MAX_STREAM_DEBUG;
+  }
+  console.log("[流式调试]", full);
+}
+
+const streamDebugText = computed(() => streamDebugLines.value.join("\n"));
+
+function clearStreamDebug() {
+  streamDebugLines.value = [];
+}
+
+// 流式追加一个字：用「固定下标」splice 替换整条消息，触发 Vue 更新。
+// 注意：不能用 indexOf(旧对象)——第一次 splice 后旧引用已不在数组里，indexOf 永远是 -1，只会显示第一个字。
+function appendStreamToken(assistantIndex, token) {
+  const list = messages.value;
+  const msg = list[assistantIndex];
+  if (!msg || msg.role !== "assistant") return;
+  list.splice(assistantIndex, 1, {
+    ...msg,
+    content: (msg.content || "") + token
+  });
+}
+
+// 只更新助手消息里的 sources（仍用下标，读当前数组里的对象）
+function setAssistantSources(assistantIndex, sources) {
+  const list = messages.value;
+  const msg = list[assistantIndex];
+  if (!msg || msg.role !== "assistant") return;
+  list.splice(assistantIndex, 1, { ...msg, sources });
+}
 
 // 用于中断请求（点击“停止生成”时调用）
 let currentAbortController = null;
@@ -200,8 +264,8 @@ async function sendMessage() {
   messages.value.push({ role: "user", content: userText });
 
   // 2) 再放一个“空的助手消息”，后面流式 token 不断追加到这里
-  const assistantMessage = { role: "assistant", content: "", sources: [] };
-  messages.value.push(assistantMessage);
+  messages.value.push({ role: "assistant", content: "", sources: [] });
+  const assistantIndex = messages.value.length - 1;
 
   // 3) 清空输入框，准备请求
   inputText.value = "";
@@ -211,7 +275,7 @@ async function sendMessage() {
 
   try {
     // 把当前会话发送给后端，后端会继续调用大模型
-    const response = await fetch("/api/chat/stream", {
+    const response = await fetch(`${getApiBase()}/api/chat/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -224,18 +288,38 @@ async function sendMessage() {
     });
 
     if (!response.ok || !response.body) {
-      assistantMessage.content = "请求失败，请检查后端日志或 API Key。";
+      const m = messages.value[assistantIndex];
+      messages.value.splice(assistantIndex, 1, {
+        ...m,
+        content: "请求失败，请检查后端日志或 API Key。"
+      });
+      pushStreamDebug(`[chat] 请求失败 status=${response.status}`);
       return;
     }
+
+    pushStreamDebug(`[chat] 开始读 SSE，URL=${getApiBase()}/api/chat/stream`);
 
     // 读取后端返回的 SSE 文本流
     const reader = response.body.getReader();
     const decoder = new TextDecoder("utf-8");
     let buffer = "";
+    let chatReadCount = 0;
+    let chatBytes = 0;
+    let chatTokens = 0;
 
     while (true) {
       const { value, done } = await reader.read();
-      if (done) break;
+      if (done) {
+        pushStreamDebug(
+          `[chat] read 结束：${chatReadCount} 次 chunk，${chatBytes} 字节，约 ${chatTokens} 个 token 片段`
+        );
+        break;
+      }
+      chatReadCount += 1;
+      chatBytes += value?.byteLength ?? 0;
+      if (chatReadCount <= 5) {
+        pushStreamDebug(`[chat] 第 ${chatReadCount} 次 read，${value?.byteLength ?? 0} 字节`);
+      }
 
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split("\n");
@@ -249,9 +333,10 @@ async function sendMessage() {
           // 每一行 data: 后面都是 JSON 事件
           const event = JSON.parse(line.slice(5).trim());
 
-          // token 事件就不断追加，让你看到“打字机效果”
+          // token：flushSync 同步刷 DOM，否则长循环里更新会攒到最后才显示
           if (event.type === "token" && event.token) {
-            assistantMessage.content += event.token;
+            chatTokens += 1;
+            appendStreamToken(assistantIndex, event.token);
           }
           // rag_status 事件：提示是否命中知识片段
           if (event.type === "rag_status" && event.enabled) {
@@ -261,12 +346,16 @@ async function sendMessage() {
           }
           // sources 事件用于展示本次回答参考了哪些文档片段
           if (event.type === "sources" && Array.isArray(event.sources)) {
-            assistantMessage.sources = event.sources;
+            setAssistantSources(assistantIndex, event.sources);
           }
 
           // error 事件显示错误信息
           if (event.type === "error") {
-            assistantMessage.content += `\n[错误] ${event.message}`;
+            const m = messages.value[assistantIndex];
+            messages.value.splice(assistantIndex, 1, {
+              ...m,
+              content: (m.content || "") + `\n[错误] ${event.message}`
+            });
           }
         } catch {
           // 解析失败直接忽略，避免中断主流程
@@ -274,11 +363,13 @@ async function sendMessage() {
       }
     }
   } catch (error) {
-    // 如果是主动取消，就提示“已停止”
+    const idx = messages.value.length - 1;
+    const m = messages.value[idx];
+    if (!m) return;
     if (String(error).includes("AbortError")) {
-      messages.value[messages.value.length - 1].content += "\n[已停止生成]";
+      messages.value.splice(idx, 1, { ...m, content: (m.content || "") + "\n[已停止生成]" });
     } else {
-      messages.value[messages.value.length - 1].content += `\n[请求异常] ${String(error)}`;
+      messages.value.splice(idx, 1, { ...m, content: (m.content || "") + `\n[请求异常] ${String(error)}` });
     }
   } finally {
     isGenerating.value = false;
@@ -296,5 +387,87 @@ function stopGenerating() {
 // 点击模板后，直接替换系统提示词
 function applyTemplate(value) {
   systemPrompt.value = value;
+}
+
+// 流式测试：调用后端 demo 接口，不调大模型，一字一字推送
+// 若能看到打字机效果，说明流式链路正常；否则问题在代理/网络/模型返回节奏
+async function runStreamDemo() {
+  if (isGenerating.value) return;
+  messages.value.push({ role: "user", content: "[流式测试]" });
+  messages.value.push({ role: "assistant", content: "", sources: [] });
+  const assistantIndex = messages.value.length - 1;
+  isGenerating.value = true;
+
+  const url = `${getApiBase()}/api/stream-demo`;
+  pushStreamDebug(`[demo] 准备请求 GET ${url}`);
+  pushStreamDebug(`[demo] getApiBase=${JSON.stringify(getApiBase())} import.meta.env.DEV=${import.meta.env.DEV}`);
+
+  let readCount = 0;
+  let totalBytes = 0;
+  let tokenCount = 0;
+
+  try {
+    const res = await fetch(url);
+    pushStreamDebug(`[demo] fetch 已返回 status=${res.status} ok=${res.ok} body=${!!res.body}`);
+    if (!res.ok || !res.body) {
+      assistantMessage.content = "流式测试请求失败";
+      pushStreamDebug(`[demo] 中止：无 body 或状态非 2xx`);
+      return;
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) {
+        pushStreamDebug(
+          `[demo] read 结束：共 ${readCount} 次 chunk，${totalBytes} 字节，解析 token ${tokenCount} 个`
+        );
+        if (readCount === 1 && tokenCount > 5) {
+          pushStreamDebug(
+            "[demo] 提示：若 chunk 只有 1 次但 token 很多，说明浏览器/网络把流攒成了一大块（仍可能逐字显示，看 nextTick）"
+          );
+        }
+        break;
+      }
+      readCount += 1;
+      const n = value?.byteLength ?? 0;
+      totalBytes += n;
+      if (readCount <= 8) {
+        pushStreamDebug(`[demo] 第 ${readCount} 次 read，本块 ${n} 字节`);
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line.startsWith("data:")) continue;
+        try {
+          const event = JSON.parse(line.slice(5).trim());
+          if (event.type === "token" && event.token) {
+            tokenCount += 1;
+            if (tokenCount <= 5) {
+              pushStreamDebug(`[demo] token #${tokenCount} ${JSON.stringify(event.token)}`);
+            }
+            appendStreamToken(assistantIndex, event.token);
+          }
+          if (event.type === "done") {
+            pushStreamDebug("[demo] 收到 SSE type=done");
+          }
+        } catch (e) {
+          pushStreamDebug(`[demo] 解析一行失败: ${String(e)}`);
+        }
+      }
+    }
+  } catch (e) {
+    const m = messages.value[assistantIndex];
+    if (m) {
+      messages.value.splice(assistantIndex, 1, { ...m, content: `流式测试异常：${String(e)}` });
+    }
+    pushStreamDebug(`[demo] catch: ${String(e)}`);
+  } finally {
+    isGenerating.value = false;
+  }
 }
 </script>

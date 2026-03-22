@@ -101,9 +101,57 @@ function searchChunks(query, topK = 3) {
   return scored;
 }
 
-// 健康检查接口：浏览器打开可快速确认服务是否正常
+// 进程启动时间：用于你确认「重启后是否已是新进程」（看 startedAt 是否变化）
+const serverStartedAt = new Date().toISOString();
+
+// 健康检查接口：浏览器打开可快速确认服务是否正常、是否已重启
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, service: "ai-copilot-server" });
+  res.json({
+    ok: true,
+    service: "ai-copilot-server",
+    startedAt: serverStartedAt,
+    hasStreamDemo: true
+  });
+});
+
+// 流式输出 demo：不调大模型，后端一个字一个字推送，用于验证前端流式渲染是否正常
+// 如果点“流式测试”能看到打字机效果，说明流式链路没问题
+app.get("/api/stream-demo", (req, res) => {
+  const reqId = `demo-${Date.now()}`;
+  // 终端里能看到：是否有人连上、第几个字写出、何时结束（排查「一次全出来」时对照前端）
+  console.log(`[stream-demo ${reqId}] 客户端已连接`);
+
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  // 部分反向代理会缓冲 SSE，告诉代理不要缓冲（Nginx 等会认）
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders?.();
+
+  const text = "流式输出测试：你能看到这段文字一个字一个字出现吗？如果可以，说明流式链路正常。";
+  let i = 0;
+  // 每 200ms 发一个字：比 500ms 快，仍便于观察打字机（可调）
+  const timer = setInterval(() => {
+    if (i >= text.length) {
+      clearInterval(timer);
+      console.log(`[stream-demo ${reqId}] 发送 done，共 ${i} 个 token`);
+      res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+      res.end();
+      return;
+    }
+    const ch = text[i];
+    // 每发一个字打一行日志（字多时终端会刷屏，但能看出是否按间隔写出）
+    if (i < 3 || i % 10 === 0 || i >= text.length - 1) {
+      console.log(`[stream-demo ${reqId}] token #${i + 1} ${JSON.stringify(ch)} t=${Date.now()}`);
+    }
+    res.write(`data: ${JSON.stringify({ type: "token", token: ch })}\n\n`);
+    i += 1;
+  }, 200);
+
+  req.on("close", () => {
+    clearInterval(timer);
+    console.log(`[stream-demo ${reqId}] 客户端断开连接`);
+  });
 });
 
 // 日志查询接口：返回最近的聊天日志，供前端成本面板或调试使用
