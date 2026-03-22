@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import express from "express";
 import "./db.js";
 import { getClientState, putClientState } from "./sessionsStore.js";
+import { ingestUpload, searchChunks, getRagConfigSummary } from "./rag.js";
 
 // 【会话历史】P1：SQLite 持久化 + GET/PUT /api/sessions（请求头 X-Client-Id: UUID 标识匿名浏览器）
 // 前端仍写 localStorage 作离线缓存；在线时与服务端双向同步。登录用户与多租户可后续扩展。
@@ -71,64 +72,7 @@ function recordChatLog({ startTime, model, useRag, outputTokens, error }) {
   if (chatLogs.length > MAX_LOGS) chatLogs.shift(); // 超出则删掉最老的一条
 }
 
-// =========================
-// 以下是最小 RAG 内存实现（学习版）
-// =========================
-// 用数组把上传内容存在内存中，重启服务后会清空（这是预期行为）
-const ragChunks = [];
-let ragDocId = 1;
-
-// 分词优化：
-// 1) 英文/数字按词切分
-// 2) 中文额外拆成单字，提升“退款几天到账”这类短问句命中率
-function tokenize(text) {
-  const normalized = String(text).toLowerCase();
-
-  const words = normalized
-    .split(/[^\p{L}\p{N}\u4e00-\u9fff]+/u)
-    .filter(Boolean);
-
-  const cjkChars = [...normalized].filter((ch) => /[\u4e00-\u9fff]/u.test(ch));
-
-  return [...words, ...cjkChars];
-}
-
-// 把长文本切成多个小块，便于后续做相似度检索
-function splitTextIntoChunks(text, chunkSize = 300, overlap = 60) {
-  const cleanText = String(text || "").trim();
-  if (!cleanText) return [];
-
-  const result = [];
-  let start = 0;
-  while (start < cleanText.length) {
-    const end = Math.min(start + chunkSize, cleanText.length);
-    result.push(cleanText.slice(start, end));
-    if (end === cleanText.length) break;
-    start = end - overlap;
-  }
-  return result;
-}
-
-// 用“关键词重合数量”做一个最小可用的相关性评分
-function searchChunks(query, topK = 3) {
-  const queryTokens = new Set(tokenize(query));
-  if (!queryTokens.size) return [];
-
-  const scored = ragChunks
-    .map((item) => {
-      const chunkTokens = tokenize(item.text);
-      let score = 0;
-      for (const token of chunkTokens) {
-        if (queryTokens.has(token)) score += 1;
-      }
-      return { ...item, score };
-    })
-    .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, topK);
-
-  return scored;
-}
+// RAG：段落分块 + BM25 见 ./rag.js（P2）
 
 // 进程启动时间：用于你确认「重启后是否已是新进程」（看 startedAt 是否变化）
 const serverStartedAt = new Date().toISOString();
@@ -141,6 +85,7 @@ app.get("/api/health", (_req, res) => {
     startedAt: serverStartedAt,
     hasStreamDemo: true,
     hasSessionsApi: true,
+    rag: getRagConfigSummary(),
   });
 });
 
@@ -227,26 +172,14 @@ app.post("/api/rag/upload", (req, res) => {
       return res.status(400).json({ error: "content is required" });
     }
 
-    const docId = ragDocId++;
-    const safeTitle = String(title).trim() || `doc-${docId}.txt`;
-    const chunks = splitTextIntoChunks(content);
-
-    chunks.forEach((text, idx) => {
-      ragChunks.push({
-        id: `${docId}-${idx + 1}`,
-        docId,
-        title: safeTitle,
-        chunkIndex: idx + 1,
-        text,
-      });
-    });
+    const result = ingestUpload({ title, content });
 
     res.json({
       ok: true,
-      docId,
-      title: safeTitle,
-      chunkCount: chunks.length,
-      totalChunks: ragChunks.length,
+      docId: result.docId,
+      title: result.title,
+      chunkCount: result.chunkCount,
+      totalChunks: result.totalChunks,
     });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -354,10 +287,11 @@ app.post("/api/chat/stream", async (req, res) => {
           enabled: true,
           matched: sources.length > 0,
           count: sources.length,
+          retrieval: "bm25",
         })}\n\n`,
       );
     }
-    // 如果开启了 RAG，把命中的来源先推给前端，方便页面展示引用
+    // 如果开启了 RAG，把命中的来源先推给前端，方便页面展示引用（含 BM25 分，便于看置信度）
     if (sources.length > 0) {
       res.write(
         `data: ${JSON.stringify({
@@ -367,6 +301,7 @@ app.post("/api/chat/stream", async (req, res) => {
             title: item.title,
             chunkIndex: item.chunkIndex,
             text: item.text,
+            score: typeof item.score === "number" ? item.score : undefined,
           })),
         })}\n\n`,
       );

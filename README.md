@@ -20,6 +20,13 @@
 - 侧栏体验：拖动 **⋮⋮** 排序；双击标题或 **名** 重命名（`titleLocked`）；**导出/导入 JSON** 备份。
 - 代码：`web/src/sessionSync.js`、`server/db.js`、`server/sessionsStore.js`；侧栏 UI：`web/src/components/ChatSidebar.vue`。
 
+### RAG（P2，已实现一版）
+
+- **分块**：先按空行拆段落，过长再滑窗；短段会合并，减少碎片（见 `server/rag.js`）。
+- **检索**：**BM25**（无需 embedding API）；带相对阈值，弱相关片段不注入 system 上下文，降低「硬扯资料」。
+- **可调**：`server/.env` 中 `RAG_CHUNK_SIZE`、`RAG_CHUNK_OVERLAP`、`RAG_TOP_K`、`RAG_MIN_RELATIVE_SCORE`。
+- **说明**：知识块仍在**内存**，重启后端会清空；向量库/持久化属后续迭代。
+
 ---
 
 ## 1. 先准备环境
@@ -95,7 +102,7 @@ npm run dev
 
 ## 6. 下一步建议（你半个月版本）
 
-- RAG：分块策略优化、向量库、引用质量评估
-- 增加 token/成本统计面板（前后端埋点）
+- RAG：embedding + 向量库、引用质量评估（人工/自动）
+- **P3 可观测**：token/成本统计面板（加强 `/api/logs` 前端展示与汇总）— 你提到优先做完 P2 再做
 - **会话**：登录用户、多租户、`activeSessionId` 服务端化、冲突合并策略
 - 增加工具调用（搜索/数据库查询）
