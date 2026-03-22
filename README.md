@@ -20,7 +20,8 @@
 **Railway / Render 等境外 PaaS 的官网在国内常不稳定**，若只面向大陆用户，建议：
 
 - **腾讯云 / 阿里云「轻量应用服务器」**：全中文控制台，SSH 上去执行根目录 `npm ci && npm run build`，再用 **PM2** 跑 `npm start`。
-- **阿里云（新手一步步）**：**[docs/DEPLOY-ALIYUN.md](./docs/DEPLOY-ALIYUN.md)** — 买机器、防火墙、SSH、复制命令。
+- **阿里云 + Docker（推荐多项目）**：**[docs/DEPLOY-ALIYUN-DOCKER.md](./docs/DEPLOY-ALIYUN-DOCKER.md)** — `docker compose up`。
+- **阿里云 + 裸机 Node + PM2**：**[docs/DEPLOY-ALIYUN.md](./docs/DEPLOY-ALIYUN.md)** — 与 Docker **二选一**。
 - **Docker + 国内云托管**：仓库根目录提供 **`Dockerfile`**，可推到腾讯云容器镜像后在「云托管」里部署（见 [docs/DEPLOY-CN.md](./docs/DEPLOY-CN.md)）。
 
 **费用与通用说明**：**[docs/DEPLOY-CN.md](./docs/DEPLOY-CN.md)**。

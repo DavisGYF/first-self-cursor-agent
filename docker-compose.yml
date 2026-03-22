@@ -1,0 +1,18 @@
+# 阿里云 / 任意已安装 Docker 的机器：在仓库根目录执行
+#   cp .env.example .env   # 填写 OPENAI_API_KEY
+#   docker compose up -d --build
+services:
+  ai-copilot:
+    build: .
+    container_name: ai-copilot
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    restart: unless-stopped
+    volumes:
+      # 会话与 RAG 数据持久化（SQLite）；删卷会清空数据
+      - sqlite-data:/app/server/data
+
+volumes:
+  sqlite-data:
