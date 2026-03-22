@@ -1,5 +1,9 @@
 # Railway 部署（可视化、公网访问）
 
+> **国内用户注意**：[railway.com](https://railway.com) 控制台在**境外**，国内访问常需代理或不稳定。若你**只考虑大陆、不想科学上网**，请优先看 **[DEPLOY-CN.md](./DEPLOY-CN.md)**（腾讯云/阿里云轻量、Docker + 国内云托管等）。
+
+---
+
 部署成功后：**不用在你电脑上开服务**，别人用 Railway 给的 **HTTPS 域名** 就能打开；二维码用任意「网址 → 二维码」工具生成即可。
 
 > **费用**：Railway 以官网 [Pricing](https://railway.com/pricing) 为准；免费档通常只有少量试用额度，个人演示一般够用，超出需绑卡或升级。**SQLite** 默认在容器磁盘上，**重部署会丢库**；要长期保留会话/RAG，请在 Railway 里挂 **Volume** 并设置环境变量 `DATABASE_PATH`（见下）。

@@ -15,12 +15,15 @@
 
 思路：**先构建前端**，再**只跑 Node 后端**；若存在 `web/dist`，后端会**同域托管页面**（与 `getApiBase()` 生产环境一致）。
 
-### Railway（推荐：可视化、不用本机常驻）
+### 国内（推荐：无需科学上网）
 
-仓库根目录已带 **`package.json` + `railway.toml`**：连 GitHub → 在 [Railway](https://railway.com) 里 **Deploy from repo**，在 **Variables** 里设 **`OPENAI_API_KEY`**，再 **Generate Domain** 即可拿到 `https://xxx.up.railway.app`。
+**Railway / Render 等境外 PaaS 的官网在国内常不稳定**，若只面向大陆用户，建议：
 
-- **部署成功后**：服务跑在 Railway 上，**不需要你电脑开机或执行 `npm start`**；别人随时用该链接访问（额度与计费以 Railway 官网为准）。
-- **详细步骤与可选 SQLite 持久化**：见 **[docs/RAILWAY.md](./docs/RAILWAY.md)**。
+- **腾讯云 / 阿里云「轻量应用服务器」**：全中文控制台，SSH 上去执行根目录 `npm ci && npm run build`，再用 **PM2** 跑 `npm start`。
+- **阿里云（新手一步步）**：**[docs/DEPLOY-ALIYUN.md](./docs/DEPLOY-ALIYUN.md)** — 买机器、防火墙、SSH、复制命令。
+- **Docker + 国内云托管**：仓库根目录提供 **`Dockerfile`**，可推到腾讯云容器镜像后在「云托管」里部署（见 [docs/DEPLOY-CN.md](./docs/DEPLOY-CN.md)）。
+
+**费用与通用说明**：**[docs/DEPLOY-CN.md](./docs/DEPLOY-CN.md)**。
 
 ### 本机试跑「生产形态」
 
@@ -31,19 +34,18 @@ cd ../server && npm install && npm start
 
 或在**仓库根目录**：`npm install && npm run build && npm start`，浏览器打开 `http://localhost:3000`（页面 + `/api/*` 同一端口）。
 
-### 自建 VPS（典型）
+### Railway（境外）
 
-1. **准备**：一台有公网 IP 的 Linux，安装 Node ≥18。
-2. 在服务器上执行根目录 `npm ci && npm run build`，用 **PM2** 跑 `npm start`（工作目录为仓库根），并放行 **`PORT`**（默认 3000）。
-3. **环境变量**：配置 `OPENAI_API_KEY` 等（可用 `server/.env` 或进程环境变量）。
-4. **HTTPS**：**Nginx / Caddy** 反代 + Let’s Encrypt。
-5. **发给别人 / 二维码**：同上。
+若你能稳定访问 [railway.com](https://railway.com)，可用仓库根目录 **`package.json` + `railway.toml`** 一键部署，见 **[docs/RAILWAY.md](./docs/RAILWAY.md)**。
+
+### 自建 VPS（境外或通用）
+
+1. 一台有公网 IP 的 Linux，安装 Node ≥18。
+2. 根目录 `npm ci && npm run build`，**PM2** 跑 `npm start`（工作目录为仓库根），放行 **`PORT`**。
+3. 环境变量：`OPENAI_API_KEY` 等（从**仓库根目录**启动时，`.env` 放在**根目录**与 `package.json` 同级）。
+4. HTTPS：**Nginx / Caddy** 等。
 
 > **注意**：不要把含 Key 的 `.env` 提交到 Git；公网演示建议加访问限制，避免 Key 被盗刷。
-
-### 其他托管平台
-
-**Render / Fly.io** 等也可：构建需执行根目录 `npm run build`，启动 `npm start`，并配置环境变量（与 Railway 类似）。
 
 ---
 
