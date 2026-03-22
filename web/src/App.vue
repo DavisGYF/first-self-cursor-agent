@@ -65,6 +65,24 @@
     <div class="row">
       <button :disabled="isGenerating" @click="sendMessage">发送</button>
       <button :disabled="!isGenerating" @click="stopGenerating">停止生成</button>
+      <button @click="toggleLogPanel">{{ showLogPanel ? "收起日志" : "查看日志" }}</button>
+    </div>
+
+    <!-- 基础日志面板：展示每次请求的耗时、token、错误（面试可讲：可观测性） -->
+    <div v-if="showLogPanel" class="source-box" style="margin-top: 12px;">
+      <div class="source-title">最近请求日志（耗时 / token / 错误）</div>
+      <button @click="fetchLogs" style="margin-bottom: 8px;">刷新</button>
+      <div v-if="logs.length === 0" class="source-item">暂无记录，发几条消息后刷新</div>
+      <div
+        v-for="(log, idx) in logs"
+        :key="idx"
+        class="source-item"
+        :style="{ color: log.error ? '#c00' : '' }"
+      >
+        {{ log.time?.slice(11, 19) }} | {{ log.elapsed }}ms | {{ log.outputTokens }} tokens |
+        {{ log.model }} {{ log.useRag ? "[RAG]" : "" }}
+        <span v-if="log.error"> | 错误: {{ log.error }}</span>
+      </div>
     </div>
   </div>
 </template>
@@ -107,8 +125,29 @@ const uploadingFile = ref(false);
 const ragStatusText = ref("");
 const ragMatchHint = ref("");
 
+// 基础日志面板：是否展开、日志列表
+const showLogPanel = ref(false);
+const logs = ref([]);
+
 // 用于中断请求（点击“停止生成”时调用）
 let currentAbortController = null;
+
+// 切换日志面板显示/隐藏
+function toggleLogPanel() {
+  showLogPanel.value = !showLogPanel.value;
+  if (showLogPanel.value) fetchLogs();
+}
+
+// 从后端拉取最近请求日志（GET /api/logs）
+async function fetchLogs() {
+  try {
+    const res = await fetch("/api/logs");
+    const data = await res.json();
+    if (data?.ok && Array.isArray(data.logs)) logs.value = data.logs;
+  } catch {
+    logs.value = [];
+  }
+}
 
 // 新开一个空会话
 function resetChat() {

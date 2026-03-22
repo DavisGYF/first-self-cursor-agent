@@ -15,9 +15,32 @@ app.use(express.json({ limit: "1mb" }));
 
 const PORT = Number(process.env.PORT || 3000);
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_BASE_URL =
-  process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
+const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
 const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "gpt-4o-mini";
+
+// =========================
+// 基础日志模块：记录每次聊天的耗时、token、错误码
+// 面试时可以讲：我做了可观测，方便排查问题和统计成本
+// =========================
+// 用数组存日志，重启后清空；生产环境可改成写文件或数据库
+const chatLogs = [];
+const MAX_LOGS = 100; // 最多保留 100 条，避免内存爆掉
+
+// 记录单次聊天请求的日志
+// 参数说明：startTime 请求开始时间戳，model 模型名，outputTokens 输出 token 数，error 若有错误则传错误信息
+function recordChatLog({ startTime, model, useRag, outputTokens, error }) {
+  const elapsed = Math.round(Date.now() - startTime);
+  const log = {
+    time: new Date().toISOString(),
+    elapsed, // 毫秒
+    model,
+    useRag: !!useRag,
+    outputTokens: outputTokens || 0,
+    error: error || null
+  };
+  chatLogs.push(log);
+  if (chatLogs.length > MAX_LOGS) chatLogs.shift(); // 超出则删掉最老的一条
+}
 
 // =========================
 // 以下是最小 RAG 内存实现（学习版）
@@ -31,8 +54,7 @@ let ragDocId = 1;
 // 2) 中文额外拆成单字，提升“退款几天到账”这类短问句命中率
 function tokenize(text) {
   const normalized = String(text).toLowerCase();
-  // 这个增加分词优化
-  // 我上传本地txt文件里面写了退款时间 用不用RGA回答都一样 问问题他识别不出来 然后这一步优化以后就行了
+
   const words = normalized
     .split(/[^\p{L}\p{N}\u4e00-\u9fff]+/u)
     .filter(Boolean);
@@ -84,6 +106,11 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "ai-copilot-server" });
 });
 
+// 日志查询接口：返回最近的聊天日志，供前端成本面板或调试使用
+app.get("/api/logs", (_req, res) => {
+  res.json({ ok: true, logs: [...chatLogs].reverse() });
+});
+
 // RAG 上传接口：前端把 txt/md 内容传上来，后端做切分并缓存到内存
 app.post("/api/rag/upload", (req, res) => {
   try {
@@ -102,7 +129,7 @@ app.post("/api/rag/upload", (req, res) => {
         docId,
         title: safeTitle,
         chunkIndex: idx + 1,
-        text,
+        text
       });
     });
 
@@ -111,7 +138,7 @@ app.post("/api/rag/upload", (req, res) => {
       docId,
       title: safeTitle,
       chunkCount: chunks.length,
-      totalChunks: ragChunks.length,
+      totalChunks: ragChunks.length
     });
   } catch (error) {
     res.status(500).json({ error: String(error) });
@@ -131,7 +158,7 @@ app.post("/api/rag/query", (req, res) => {
       title: item.title,
       chunkIndex: item.chunkIndex,
       text: item.text,
-      score: item.score,
+      score: item.score
     }));
 
     res.json({ ok: true, query, sources });
@@ -142,28 +169,32 @@ app.post("/api/rag/query", (req, res) => {
 
 // 流式聊天接口：前端通过 fetch + ReadableStream 一边收一边展示
 app.post("/api/chat/stream", async (req, res) => {
+  // 记录请求开始时间，用于计算耗时（面试可讲：可观测性）
+  const startTime = Date.now();
+  // 输出 token 计数器，流式返回时每收到一个 token 就 +1
+  let outputTokens = 0;
+
   try {
     // 请求体可传 model/messages/systemPrompt，不传就走默认值
-    const {
-      model = DEFAULT_MODEL,
-      messages = [],
-      systemPrompt = "",
-      useRag = false,
-    } = req.body || {};
+    const { model = DEFAULT_MODEL, messages = [], systemPrompt = "", useRag = false } = req.body || {};
 
     // 如果没配 key，直接报错并提示如何修复
     if (!OPENAI_API_KEY) {
+      recordChatLog({
+        startTime,
+        model,
+        useRag,
+        outputTokens: 0,
+        error: "Missing OPENAI_API_KEY"
+      });
       return res.status(400).json({
-        error:
-          "Missing OPENAI_API_KEY. Please copy .env.example to .env and fill key.",
+        error: "Missing OPENAI_API_KEY. Please copy .env.example to .env and fill key."
       });
     }
 
     // 找出最后一条用户消息，作为本次 RAG 检索 query
     const latestUserMessage =
-      [...messages]
-        .reverse()
-        .find((item) => item?.role === "user" && item?.content)?.content || "";
+      [...messages].reverse().find((item) => item?.role === "user" && item?.content)?.content || "";
     const sources = useRag ? searchChunks(latestUserMessage, 3) : [];
 
     // 构造发送给模型的消息：系统提示 +（可选）RAG上下文 + 用户历史消息
@@ -176,14 +207,14 @@ app.post("/api/chat/stream", async (req, res) => {
       const ragContext = sources
         .map(
           (item, idx) =>
-            `【资料${idx + 1} | ${item.title}#${item.chunkIndex}】\n${item.text}`,
+            `【资料${idx + 1} | ${item.title}#${item.chunkIndex}】\n${item.text}`
         )
         .join("\n\n");
       finalMessages.push({
         role: "system",
         content:
           "你必须优先根据给定资料回答；若资料不足，请明确说明“资料中未提供完整信息”。\n\n" +
-          ragContext,
+          ragContext
       });
     }
     for (const item of messages) {
@@ -206,8 +237,8 @@ app.post("/api/chat/stream", async (req, res) => {
           type: "rag_status",
           enabled: true,
           matched: sources.length > 0,
-          count: sources.length,
-        })}\n\n`,
+          count: sources.length
+        })}\n\n`
       );
     }
     // 如果开启了 RAG，把命中的来源先推给前端，方便页面展示引用
@@ -219,9 +250,9 @@ app.post("/api/chat/stream", async (req, res) => {
             id: item.id,
             title: item.title,
             chunkIndex: item.chunkIndex,
-            text: item.text,
-          })),
-        })}\n\n`,
+            text: item.text
+          }))
+        })}\n\n`
       );
     }
 
@@ -230,7 +261,7 @@ app.post("/api/chat/stream", async (req, res) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        Authorization: `Bearer ${OPENAI_API_KEY}`
       },
       body: JSON.stringify({
         model,
@@ -238,16 +269,21 @@ app.post("/api/chat/stream", async (req, res) => {
         messages: finalMessages,
         // 降低温度提高稳定性；限制输出长度可减少等待时间
         temperature: useRag ? 0.2 : 0.5,
-        max_tokens: 400,
-      }),
+        max_tokens: 400
+      })
     });
 
     // 如果上游接口失败，透传错误，便于你定位问题
     if (!response.ok || !response.body) {
       const errorText = await response.text();
-      res.write(
-        `data: ${JSON.stringify({ type: "error", message: errorText })}\n\n`,
-      );
+      recordChatLog({
+        startTime,
+        model,
+        useRag,
+        outputTokens: 0,
+        error: `API ${response.status}: ${errorText.slice(0, 200)}`
+      });
+      res.write(`data: ${JSON.stringify({ type: "error", message: errorText })}\n\n`);
       res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
       return res.end();
     }
@@ -274,7 +310,17 @@ app.post("/api/chat/stream", async (req, res) => {
 
         const data = line.slice(5).trim();
         if (data === "[DONE]") {
-          res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+          // 流结束，记录日志（耗时、token 数、无错误）
+          recordChatLog({
+            startTime,
+            model,
+            useRag,
+            outputTokens,
+            error: null
+          });
+          res.write(
+            `data: ${JSON.stringify({ type: "done", outputTokens, elapsed: Date.now() - startTime })}\n\n`
+          );
           res.end();
           return;
         }
@@ -284,6 +330,7 @@ app.post("/api/chat/stream", async (req, res) => {
           const json = JSON.parse(data);
           const token = json?.choices?.[0]?.delta?.content || "";
           if (token) {
+            outputTokens += 1;
             res.write(`data: ${JSON.stringify({ type: "token", token })}\n\n`);
           }
         } catch {
@@ -293,13 +340,27 @@ app.post("/api/chat/stream", async (req, res) => {
     }
 
     // 上游主动结束时，补发 done 事件
-    res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+    recordChatLog({
+      startTime,
+      model,
+      useRag,
+      outputTokens,
+      error: null
+    });
+    res.write(
+      `data: ${JSON.stringify({ type: "done", outputTokens, elapsed: Date.now() - startTime })}\n\n`
+    );
     res.end();
   } catch (error) {
-    // 统一兜底错误，避免接口挂死
-    res.write(
-      `data: ${JSON.stringify({ type: "error", message: String(error) })}\n\n`,
-    );
+    // 统一兜底错误：未捕获的异常（如网络中断），记录到日志
+    recordChatLog({
+      startTime,
+      model: req?.body?.model || DEFAULT_MODEL,
+      useRag: !!req?.body?.useRag,
+      outputTokens: 0,
+      error: String(error)
+    });
+    res.write(`data: ${JSON.stringify({ type: "error", message: String(error) })}\n\n`);
     res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
     res.end();
   }
