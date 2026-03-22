@@ -3,7 +3,12 @@
 #   docker compose up -d --build
 services:
   ai-copilot:
-    build: .
+    build:
+      context: .
+      args:
+        # 国内默认 true / npmmirror；海外可改为 false + https://registry.npmjs.org
+        USE_CN_APT: "true"
+        NPM_REGISTRY: "https://registry.npmmirror.com"
     container_name: ai-copilot
     ports:
       - "3000:3000"

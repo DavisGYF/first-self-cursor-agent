@@ -43,6 +43,30 @@ ssh root@你的公网IP
 
 下面**整段都在服务器里执行**（你已经 SSH 进去之后）。
 
+### 第 0 步（强烈推荐）：配置 Docker Hub 镜像加速
+
+拉 `node:20-bookworm-slim` 等基础镜像时，走阿里云加速器会**快很多**（改的是**本机 Docker 守护进程**，和 Dockerfile 是两回事）。
+
+1. 打开阿里云控制台 → 搜 **容器镜像服务 ACR** → **镜像工具** → **镜像加速器**，复制你的**专属加速地址**（形如 `https://xxxx.mirror.aliyuncs.com`）。
+2. 在服务器上执行（把 `你的加速地址` 换成复制的 URL）：
+
+```bash
+sudo mkdir -p /etc/docker
+sudo tee /etc/docker/daemon.json <<'EOF'
+{
+  "registry-mirrors": ["你的加速地址"]
+}
+EOF
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+```
+
+3. 验证：`docker info | grep -A3 "Registry Mirrors"`
+
+> 若已有 `daemon.json`，把 `registry-mirrors` 合并进现有 JSON，不要直接覆盖丢其它配置。
+
+---
+
 ### 第 1 步：确认 Docker 能用
 
 ```bash

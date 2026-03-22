@@ -26,6 +26,8 @@
 
 **费用与通用说明**：**[docs/DEPLOY-CN.md](./docs/DEPLOY-CN.md)**。
 
+**部署命令都是啥意思（备忘）**：**[docs/服务器部署指令DEPLOY-COMMANDS-EXPLAINED.md](./docs/服务器部署指令DEPLOY-COMMANDS-EXPLAINED.md)**。
+
 ### 本机试跑「生产形态」
 
 ```bash
