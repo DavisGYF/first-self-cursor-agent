@@ -1,7 +1,7 @@
 <template>
   <div class="app-layout">
     <ChatSidebar
-      :sessions="sortedSessions"
+      :sessions="displaySessions"
       :active-session-id="activeSessionId"
       :is-generating="isGenerating"
       :uploading-file="uploadingFile"
@@ -10,6 +10,10 @@
       @create-session="createNewSession"
       @switch-session="switchSession"
       @delete-session="deleteSession"
+      @rename-session="onRenameSession"
+      @reorder-sessions="reorderSessions"
+      @export-backup="exportSessionsBackup"
+      @import-backup="importSessionsBackup"
       @file-change="onFileChange"
       @upload-click="uploadRagFile"
     />
@@ -53,13 +57,6 @@
       </label>
     </div>
 
-    <div class="row">
-      <input type="file" accept=".txt,.md,text/plain,text/markdown" @change="onFileChange" />
-      <button :disabled="!selectedFile || uploadingFile" @click="uploadRagFile">
-        {{ uploadingFile ? "上传中..." : "上传知识库文件" }}
-      </button>
-    </div>
-    <p v-if="ragStatusText" class="subtitle" style="margin-top: -4px;">{{ ragStatusText }}</p>
     <p v-if="ragMatchHint" class="subtitle" style="margin-top: -10px;">{{ ragMatchHint }}</p>
 
     <div class="messages">
@@ -172,14 +169,30 @@ const ragMatchHint = ref("");
 // =========================
 const SESSIONS_STORAGE_KEY = "ai-copilot-sessions-v1";
 const ACTIVE_SESSION_STORAGE_KEY = "ai-copilot-active-session-v1";
+/** 侧栏展示顺序（仅 id 列表，与 sessions 数组顺序无关） */
+const SESSION_ORDER_STORAGE_KEY = "ai-copilot-session-order-v1";
 
 const sessions = ref([]);
 const activeSessionId = ref("");
+const sessionSidebarOrder = ref([]);
 
-// 侧边栏按更新时间倒序，最近改的在上
-const sortedSessions = computed(() =>
-  [...sessions.value].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
-);
+// 按 sessionSidebarOrder 排会话；顺序里没有的 id 会按 updatedAt 降序补在末尾
+const displaySessions = computed(() => {
+  const byId = new Map(sessions.value.map((s) => [s.id, s]));
+  const ordered = [];
+  const seen = new Set();
+  for (const id of sessionSidebarOrder.value) {
+    const s = byId.get(id);
+    if (s) {
+      ordered.push(s);
+      seen.add(id);
+    }
+  }
+  const rest = sessions.value
+    .filter((s) => !seen.has(s.id))
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  return [...ordered, ...rest];
+});
 
 // 侧栏展示用：当前选中的本地文件名（实际上传逻辑仍在下方 onFileChange / uploadRagFile）
 const selectedFileName = computed(() => selectedFile.value?.name?.trim() || "");
@@ -204,10 +217,34 @@ function loadSessionsFromStorage() {
   }
 }
 
-// 把整个 sessions + 当前选中 id 写回本地
+function loadSessionOrderFromStorage() {
+  try {
+    const raw = localStorage.getItem(SESSION_ORDER_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      sessionSidebarOrder.value = parsed.filter((id) => typeof id === "string");
+    }
+  } catch (e) {
+    console.warn("[会话顺序] 读取 localStorage 失败", e);
+  }
+}
+
+// 保证顺序里的 id 都存在，且新会话 id 会出现在列表中
+function ensureSessionOrderConsistency() {
+  const ids = new Set(sessions.value.map((s) => s.id));
+  let order = sessionSidebarOrder.value.filter((id) => ids.has(id));
+  const missing = sessions.value.filter((s) => !order.includes(s.id));
+  missing.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  order = [...order, ...missing.map((s) => s.id)];
+  sessionSidebarOrder.value = order;
+}
+
+// 把整个 sessions + 侧栏顺序 + 当前选中 id 写回本地
 function saveSessionsToStorage() {
   try {
     localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions.value));
+    localStorage.setItem(SESSION_ORDER_STORAGE_KEY, JSON.stringify(sessionSidebarOrder.value));
     localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, activeSessionId.value);
   } catch (e) {
     console.warn("[会话] 写入 localStorage 失败（可能超出配额）", e);
@@ -221,7 +258,10 @@ function persistCurrentSession() {
   const idx = sessions.value.findIndex((s) => s.id === id);
   if (idx === -1) return;
   const firstUser = messages.value.find((m) => m.role === "user");
-  const title = (firstUser?.content || "").trim().slice(0, 28) || "新会话";
+  const autoTitle = (firstUser?.content || "").trim().slice(0, 28) || "新会话";
+  const prev = sessions.value[idx];
+  // 用户手动改过标题则不再用首条用户消息覆盖
+  const title = prev.titleLocked ? prev.title : autoTitle;
   sessions.value[idx] = {
     ...sessions.value[idx],
     messages: JSON.parse(JSON.stringify(messages.value)),
@@ -281,6 +321,7 @@ function deleteSession(id) {
   const idx = sessions.value.findIndex((s) => s.id === id);
   if (idx === -1) return;
   sessions.value.splice(idx, 1);
+  sessionSidebarOrder.value = sessionSidebarOrder.value.filter((x) => x !== id);
   if (activeSessionId.value === id) {
     activeSessionId.value = sessions.value[0].id;
     applySessionToUI(activeSessionId.value);
@@ -288,28 +329,102 @@ function deleteSession(id) {
   saveSessionsToStorage();
 }
 
+// 侧栏重命名：锁定标题，避免随后 persist 用首条用户消息顶掉
+function onRenameSession({ id, title }) {
+  const t = String(title || "").trim().slice(0, 60) || "新会话";
+  const idx = sessions.value.findIndex((s) => s.id === id);
+  if (idx === -1) return;
+  sessions.value[idx] = {
+    ...sessions.value[idx],
+    title: t,
+    titleLocked: true,
+    updatedAt: Date.now()
+  };
+  saveSessionsToStorage();
+}
+
+// 拖拽后的 id 顺序（由 ChatSidebar 根据当前展示列表算出）
+function reorderSessions(newOrderIds) {
+  const set = new Set(sessions.value.map((s) => s.id));
+  const valid = newOrderIds.filter((id) => set.has(id));
+  for (const s of sessions.value) {
+    if (!valid.includes(s.id)) valid.push(s.id);
+  }
+  sessionSidebarOrder.value = valid;
+  saveSessionsToStorage();
+}
+
+// 导出 JSON 备份（可拷到另一台电脑或留档）
+function exportSessionsBackup() {
+  const payload = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    sessions: sessions.value,
+    sessionOrder: sessionSidebarOrder.value,
+    activeSessionId: activeSessionId.value
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `ai-copilot-sessions-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// 从备份文件恢复（会替换当前浏览器里的会话数据）
+async function importSessionsBackup(file) {
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    if (!Array.isArray(data.sessions) || data.sessions.length === 0) {
+      alert("文件里没有有效的 sessions 数组");
+      return;
+    }
+    if (!confirm("将用备份替换当前所有会话与顺序，确定吗？")) return;
+    sessions.value = data.sessions;
+    sessionSidebarOrder.value = Array.isArray(data.sessionOrder)
+      ? data.sessionOrder.filter((id) => typeof id === "string")
+      : [];
+    ensureSessionOrderConsistency();
+    const aid = data.activeSessionId;
+    const exists = aid && sessions.value.some((s) => s.id === aid);
+    activeSessionId.value = exists ? aid : sessions.value[0].id;
+    applySessionToUI(activeSessionId.value);
+    saveSessionsToStorage();
+  } catch (e) {
+    console.warn("[导入备份] 失败", e);
+    alert(`导入失败：${String(e)}`);
+  }
+}
+
 // 页面首次加载：恢复会话；没有则建一条默认的
 onMounted(() => {
   loadSessionsFromStorage();
+  loadSessionOrderFromStorage();
   if (sessions.value.length === 0) {
     const id = generateSessionId();
     sessions.value = [
       {
         id,
         title: "新会话",
+        titleLocked: false,
         messages: [],
         updatedAt: Date.now(),
         systemPrompt: promptTemplates[0].value,
         selectedModel: models[0]
       }
     ];
+    sessionSidebarOrder.value = [id];
     activeSessionId.value = id;
     saveSessionsToStorage();
   } else {
+    ensureSessionOrderConsistency();
     const savedActive = localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
     const exists = savedActive && sessions.value.some((s) => s.id === savedActive);
     activeSessionId.value = exists ? savedActive : sessions.value[0].id;
     applySessionToUI(activeSessionId.value);
+    saveSessionsToStorage();
   }
 });
 

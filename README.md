@@ -16,6 +16,7 @@
 - 会话列表、消息、系统提示与所选模型会保存在本机浏览器（键名如 `ai-copilot-sessions-v1`）。
 - **换浏览器 / 清缓存会丢数据**；若要多端同步或登录用户维度存储，需再接入后端 API + 数据库（当前 `server` 未提供 `/api/sessions`）。
 - 侧栏组件：`web/src/components/ChatSidebar.vue`；主逻辑仍在 `web/src/App.vue`。
+- 侧栏体验：拖动 **⋮⋮** 调整顺序（`localStorage` 键 `ai-copilot-session-order-v1`）；双击标题或点 **名** 重命名（带 `titleLocked`，不会被自动标题覆盖）；**导出备份 / 导入备份** 为 JSON 文件。
 
 ---
 
