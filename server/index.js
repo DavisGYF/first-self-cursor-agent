@@ -2,6 +2,9 @@ import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
 
+// 【会话历史】聊天会话列表由前端 localStorage 持久化，本服务不提供 /api/sessions。
+// 若以后要多端同步或登录用户，可在此增加 REST + 数据库，与现有 chat/stream、RAG 并行。
+
 // 加载 .env 环境变量，方便本地开发时读取 key/baseURL
 dotenv.config();
 

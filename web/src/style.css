@@ -11,9 +11,136 @@ body {
 }
 
 #app {
-  max-width: 960px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
+}
+
+/* 主区 + 左侧会话列表 */
+.app-layout {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.session-sidebar {
+  flex: 0 0 220px;
+  background: #fff;
+  border: 1px solid #e6e8ef;
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 4px 12px rgba(19, 33, 68, 0.04);
+  max-height: 85vh;
+  overflow: auto;
+}
+
+.session-sidebar h2 {
+  font-size: 14px;
+  margin: 0 0 10px;
+  color: #374151;
+}
+
+/* ChatSidebar：分区与知识库上传区 */
+.sidebar-section {
+  margin-bottom: 4px;
+}
+
+.sidebar-section:last-child {
+  margin-bottom: 0;
+}
+
+.sidebar-divider {
+  height: 1px;
+  margin: 14px 0;
+  background: #e6e8ef;
+  border: none;
+}
+
+.sidebar-hint {
+  margin: 0 0 10px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #64748b;
+}
+
+.sidebar-btn-block {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.sidebar-file-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebar-file-input {
+  width: 100%;
+  padding: 8px;
+  font-size: 12px;
+}
+
+.sidebar-file-name {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: #475569;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-rag-status {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #0369a1;
+}
+
+.session-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  border: 1px solid transparent;
+  color: #334155;
+}
+
+.session-item:hover {
+  background: #f1f5f9;
+}
+
+.session-item.active {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+
+.session-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-del {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  font-size: 12px;
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.session-del:hover {
+  background: #fecaca;
+}
+
+.main-column {
+  flex: 1;
+  min-width: 0;
 }
 
 .panel {

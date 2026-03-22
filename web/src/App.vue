@@ -1,4 +1,20 @@
 <template>
+  <div class="app-layout">
+    <ChatSidebar
+      :sessions="sortedSessions"
+      :active-session-id="activeSessionId"
+      :is-generating="isGenerating"
+      :uploading-file="uploadingFile"
+      :selected-file-name="selectedFileName"
+      :rag-status-text="ragStatusText"
+      @create-session="createNewSession"
+      @switch-session="switchSession"
+      @delete-session="deleteSession"
+      @file-change="onFileChange"
+      @upload-click="uploadRagFile"
+    />
+
+    <div class="main-column">
   <div class="panel">
     <h1 class="title">AI Copilot Demo（Vue + Express）</h1>
     <p class="subtitle">这是你的学习版项目：支持对话、流式输出、RAG 上传与引用展示。</p>
@@ -12,7 +28,6 @@
       <select v-model="selectedModel">
         <option v-for="model in models" :key="model" :value="model">{{ model }}</option>
       </select>
-      <button @click="resetChat">新建会话</button>
     </div>
 
     <div class="row">
@@ -102,10 +117,13 @@
       </div>
     </div>
   </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
-import { ref, nextTick, computed } from "vue";
+import { ref, nextTick, computed, onMounted } from "vue";
+import ChatSidebar from "./components/ChatSidebar.vue";
 
 // 开发环境下：Vite 的 /api 代理会缓冲 SSE，流式会「一整段才到前端」。
 // 所以流式相关请求直连后端 3000；生产环境仍用相对路径（同域部署）。
@@ -147,6 +165,153 @@ const selectedFile = ref(null);
 const uploadingFile = ref(false);
 const ragStatusText = ref("");
 const ragMatchHint = ref("");
+
+// =========================
+// 历史会话（仅浏览器 localStorage，不落库、不调后端）
+// 每条：{ id, title, messages, updatedAt, systemPrompt?, selectedModel? }
+// =========================
+const SESSIONS_STORAGE_KEY = "ai-copilot-sessions-v1";
+const ACTIVE_SESSION_STORAGE_KEY = "ai-copilot-active-session-v1";
+
+const sessions = ref([]);
+const activeSessionId = ref("");
+
+// 侧边栏按更新时间倒序，最近改的在上
+const sortedSessions = computed(() =>
+  [...sessions.value].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+);
+
+// 侧栏展示用：当前选中的本地文件名（实际上传逻辑仍在下方 onFileChange / uploadRagFile）
+const selectedFileName = computed(() => selectedFile.value?.name?.trim() || "");
+
+function generateSessionId() {
+  return typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `s-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+// 从 localStorage 读出会话数组（失败则保持空数组）
+function loadSessionsFromStorage() {
+  try {
+    const raw = localStorage.getItem(SESSIONS_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length) {
+      sessions.value = parsed;
+    }
+  } catch (e) {
+    console.warn("[会话] 读取 localStorage 失败", e);
+  }
+}
+
+// 把整个 sessions + 当前选中 id 写回本地
+function saveSessionsToStorage() {
+  try {
+    localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions.value));
+    localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, activeSessionId.value);
+  } catch (e) {
+    console.warn("[会话] 写入 localStorage 失败（可能超出配额）", e);
+  }
+}
+
+// 把当前界面上的 messages / 系统提示 / 模型写回「当前会话」那条记录
+function persistCurrentSession() {
+  const id = activeSessionId.value;
+  if (!id) return;
+  const idx = sessions.value.findIndex((s) => s.id === id);
+  if (idx === -1) return;
+  const firstUser = messages.value.find((m) => m.role === "user");
+  const title = (firstUser?.content || "").trim().slice(0, 28) || "新会话";
+  sessions.value[idx] = {
+    ...sessions.value[idx],
+    messages: JSON.parse(JSON.stringify(messages.value)),
+    title,
+    updatedAt: Date.now(),
+    systemPrompt: systemPrompt.value,
+    selectedModel: selectedModel.value
+  };
+  saveSessionsToStorage();
+}
+
+// 根据会话 id 把数据灌回界面（切换会话时调用）
+function applySessionToUI(sessionId) {
+  const s = sessions.value.find((x) => x.id === sessionId);
+  if (!s) return;
+  messages.value = JSON.parse(JSON.stringify(s.messages || []));
+  systemPrompt.value = s.systemPrompt ?? promptTemplates[0].value;
+  selectedModel.value = s.selectedModel && models.includes(s.selectedModel) ? s.selectedModel : models[0];
+  ragMatchHint.value = "";
+}
+
+// 新建一条空会话，并切过去（先保存当前会话内容）
+function createNewSession() {
+  if (isGenerating.value) return;
+  persistCurrentSession();
+  const id = generateSessionId();
+  sessions.value.unshift({
+    id,
+    title: "新会话",
+    messages: [],
+    updatedAt: Date.now(),
+    systemPrompt: systemPrompt.value,
+    selectedModel: selectedModel.value
+  });
+  activeSessionId.value = id;
+  messages.value = [];
+  ragMatchHint.value = "";
+  ragStatusText.value = "";
+  saveSessionsToStorage();
+}
+
+// 点击左侧某条会话：先落盘当前，再切换
+function switchSession(id) {
+  if (id === activeSessionId.value || isGenerating.value) return;
+  persistCurrentSession();
+  activeSessionId.value = id;
+  applySessionToUI(id);
+  saveSessionsToStorage();
+}
+
+// 删除一条会话；至少保留一条
+function deleteSession(id) {
+  if (sessions.value.length <= 1) {
+    alert("至少保留一个会话");
+    return;
+  }
+  const idx = sessions.value.findIndex((s) => s.id === id);
+  if (idx === -1) return;
+  sessions.value.splice(idx, 1);
+  if (activeSessionId.value === id) {
+    activeSessionId.value = sessions.value[0].id;
+    applySessionToUI(activeSessionId.value);
+  }
+  saveSessionsToStorage();
+}
+
+// 页面首次加载：恢复会话；没有则建一条默认的
+onMounted(() => {
+  loadSessionsFromStorage();
+  if (sessions.value.length === 0) {
+    const id = generateSessionId();
+    sessions.value = [
+      {
+        id,
+        title: "新会话",
+        messages: [],
+        updatedAt: Date.now(),
+        systemPrompt: promptTemplates[0].value,
+        selectedModel: models[0]
+      }
+    ];
+    activeSessionId.value = id;
+    saveSessionsToStorage();
+  } else {
+    const savedActive = localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
+    const exists = savedActive && sessions.value.some((s) => s.id === savedActive);
+    activeSessionId.value = exists ? savedActive : sessions.value[0].id;
+    applySessionToUI(activeSessionId.value);
+  }
+});
 
 // 基础日志面板：是否展开、日志列表
 const showLogPanel = ref(false);
@@ -211,12 +376,6 @@ async function fetchLogs() {
   } catch {
     logs.value = [];
   }
-}
-
-// 新开一个空会话
-function resetChat() {
-  messages.value = [];
-  ragMatchHint.value = "";
 }
 
 // 选择上传文件：这里只记录文件对象，实际读取在上传时进行
@@ -374,6 +533,8 @@ async function sendMessage() {
   } finally {
     isGenerating.value = false;
     currentAbortController = null;
+    // 一轮对话结束（成功/失败/中止）后把当前会话写回 localStorage
+    persistCurrentSession();
   }
 }
 
@@ -410,7 +571,10 @@ async function runStreamDemo() {
     const res = await fetch(url);
     pushStreamDebug(`[demo] fetch 已返回 status=${res.status} ok=${res.ok} body=${!!res.body}`);
     if (!res.ok || !res.body) {
-      assistantMessage.content = "流式测试请求失败";
+      const m = messages.value[assistantIndex];
+      if (m) {
+        messages.value.splice(assistantIndex, 1, { ...m, content: "流式测试请求失败" });
+      }
       pushStreamDebug(`[demo] 中止：无 body 或状态非 2xx`);
       return;
     }
@@ -468,6 +632,7 @@ async function runStreamDemo() {
     pushStreamDebug(`[demo] catch: ${String(e)}`);
   } finally {
     isGenerating.value = false;
+    persistCurrentSession();
   }
 }
 </script>
