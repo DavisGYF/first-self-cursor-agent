@@ -35,7 +35,7 @@
               <code class="inline-code">localhost:3000</code>
               ，避免 Vite 代理缓冲 SSE。健康检查：
               <el-link href="http://localhost:3000/api/health" target="_blank" type="primary">/api/health</el-link>
-              （<code class="inline-code">startedAt</code> 随进程重启变化）。
+              （<code class="inline-code">startedAt</code> 随进程重启变化）。 最近一次部署时间<span style="color: red;">2026年03月23日16:54:54</span>
             </el-text>
           </section>
 
