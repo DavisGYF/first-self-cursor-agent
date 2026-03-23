@@ -10,6 +10,10 @@
     "build": "npm run build:web && npm run build:server",
     "build:web": "npm ci --prefix web && npm run build --prefix web",
     "build:server": "npm ci --prefix server",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "dev:server": "npm run dev --prefix server",
+    "dev:web": "npm run dev --prefix web",
+    "dev:all": "npm run dev:server & until curl -s http://127.0.0.1:3000/api/health >/dev/null 2>&1; do sleep 0.5; done; npm run dev:web",
+    "dev:server:restart": "ulimit -n 8192 && lsof -t -i:3000 | xargs -r kill -9 && npm run dev --prefix server"
   }
 }

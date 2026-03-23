@@ -52,6 +52,13 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_BASE_URL =
   process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
 const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "gpt-4o-mini";
+// 限制单次生成的最大 token 数；避免回答过长被上游直接截断
+// 你也可以在服务器 .env 里通过 MAX_TOKENS 覆盖默认值
+const MAX_TOKENS = Number(process.env.MAX_TOKENS || 400);
+
+console.log(
+  `[boot] MAX_TOKENS=${MAX_TOKENS} (env=${process.env.MAX_TOKENS || "unset"}) cwd=${process.cwd()}`
+);
 
 // =========================
 // P3 可观测：单次请求日志 + 汇总（面试可讲：耗时、token、RAG 命中、粗算成本）
@@ -296,6 +303,7 @@ app.post("/api/chat/stream", async (req, res) => {
   let ragHitCount = 0;
   let ragMatched = false;
   let estimatedPromptTokens = 0;
+  let finishReason = null;
 
   try {
     // 请求体可传 model/messages/systemPrompt，不传就走默认值
@@ -304,6 +312,8 @@ app.post("/api/chat/stream", async (req, res) => {
       messages = [],
       systemPrompt = "",
       useRag = false,
+      // 允许前端按需覆盖最大生成长度；不传则使用服务端默认
+      maxTokens,
     } = req.body || {};
 
     // 如果没配 key，直接报错并提示如何修复
@@ -413,7 +423,7 @@ app.post("/api/chat/stream", async (req, res) => {
         messages: finalMessages,
         // 降低温度提高稳定性；限制输出长度可减少等待时间
         temperature: useRag ? 0.2 : 0.5,
-        max_tokens: 400,
+        max_tokens: Number(maxTokens || MAX_TOKENS),
       }),
     });
 
@@ -470,8 +480,16 @@ app.post("/api/chat/stream", async (req, res) => {
             ragMatched,
             estimatedPromptTokens,
           });
+          console.log(
+            `[chat] upstream finished. finishReason=${finishReason || "unknown"}, maxTokens=${maxTokens || MAX_TOKENS}`
+          );
           res.write(
-            `data: ${JSON.stringify({ type: "done", outputTokens, elapsed: Date.now() - startTime })}\n\n`,
+            `data: ${JSON.stringify({
+              type: "done",
+              outputTokens,
+              elapsed: Date.now() - startTime,
+              finishReason,
+            })}\n\n`,
           );
           res.end();
           return;
@@ -480,6 +498,9 @@ app.post("/api/chat/stream", async (req, res) => {
         try {
           // 提取增量 token（delta content）
           const json = JSON.parse(data);
+          // 用于确认是因长度限制还是其它原因结束
+          const fr = json?.choices?.[0]?.finish_reason;
+          if (fr) finishReason = String(fr);
           const token = json?.choices?.[0]?.delta?.content || "";
           if (token) {
             outputTokens += 1;
@@ -503,7 +524,12 @@ app.post("/api/chat/stream", async (req, res) => {
       estimatedPromptTokens,
     });
     res.write(
-      `data: ${JSON.stringify({ type: "done", outputTokens, elapsed: Date.now() - startTime })}\n\n`,
+      `data: ${JSON.stringify({
+        type: "done",
+        outputTokens,
+        elapsed: Date.now() - startTime,
+        finishReason,
+      })}\n\n`,
     );
     res.end();
   } catch (error) {

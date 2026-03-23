@@ -670,6 +670,9 @@ textarea:not(.el-textarea__inner) {
   margin: 10px 0;
   line-height: 1.7;
   white-space: pre-wrap;
+  /* 长字符串/URL/代码长行需要在小屏内断开，否则会在 overflow-x:hidden 下被裁掉 */
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .msg-user {
@@ -698,6 +701,9 @@ textarea:not(.el-textarea__inner) {
   font-size: 12px;
   color: #374151;
   margin: 4px 0;
+  /* 引用来源里的长文本也同样需要断行 */
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .source-score {
