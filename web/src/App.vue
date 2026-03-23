@@ -137,9 +137,9 @@
 
               <el-alert v-if="ragMatchHint" :title="ragMatchHint" type="info" show-icon :closable="false" />
 
-              <!-- 对话区：固定高度，仅框内滚动，不挤占下方输入/按钮 -->
+              <!-- 对话区：min/max 高度见 style.css 变量；原生滚动，避免 el-scrollbar 在定高下高度链断裂 -->
               <div class="chat-messages-fullbleed conversation-messages-grow">
-                <el-scrollbar class="messages-scrollbar messages-scrollbar-fill">
+                <div class="messages-scroll-view" tabindex="0" role="log" aria-label="对话消息">
                   <div class="messages messages-inner">
                     <div
                       v-for="(msg, idx) in messages"
@@ -160,7 +160,7 @@
                       </div>
                     </div>
                   </div>
-                </el-scrollbar>
+                </div>
               </div>
 
               <!-- 无消息时也占满中间区域，本块始终贴对话区最底部一行 -->

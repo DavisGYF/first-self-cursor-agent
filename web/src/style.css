@@ -3,6 +3,12 @@
   box-sizing: border-box;
 }
 
+/* 对话消息框：明确最小 / 最大高度（长文只在框内滚，不跟 flex 猜高度） */
+:root {
+  --chat-msg-min-h: 220px;
+  --chat-msg-max-h: 520px;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -15,15 +21,19 @@ body {
   margin: 0 auto;
   padding: 12px 16px 16px;
   min-height: 100vh;
+  min-height: 100dvh;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 
-/* 主区 + 左侧会话列表 */
+/* 主区 + 左侧会话列表（占满 #app 剩余高度，便于内部对话区 flex 撑满） */
 .app-layout {
   display: flex;
   gap: 12px;
   align-items: stretch;
-  min-height: calc(100vh - 28px);
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .session-sidebar {
@@ -184,6 +194,42 @@ body {
   flex-direction: column;
 }
 
+/* 窄屏：左侧栏与主区上下排列，主区全宽（避免「左固定 + 右极窄」） */
+@media (max-width: 768px) {
+  #app {
+    max-width: none;
+    padding: 8px 10px 14px;
+  }
+
+  .app-layout {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  /* 主对话区在上，会话列表在下，便于先聊再切会话 */
+  .main-column {
+    order: -1;
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .session-sidebar {
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: none;
+    max-height: min(42vh, 340px);
+  }
+
+  :root {
+    --chat-msg-min-h: 200px;
+    --chat-msg-max-h: 440px;
+  }
+}
+
 /* 主区：Element Plus el-card — 撑满主列高度，便于上下约 50/50 分区 */
 .panel-card {
   --panel-card-body-padding-x: 18px;
@@ -245,18 +291,26 @@ body {
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
-  /* 中间对话块固定高度、内部滚动；整块区过长时再滚（如展开监控卡片） */
+  /* 对话主体 flex 分配高度；展开监控等额外卡片时整块仍可滚 */
   overflow-y: auto;
 }
 
-/* 对话区：上 RAG/提示 → 中间固定高度消息框（内部滚动）→ 下输入+按钮永远贴底、不被长对话顶走 */
+/* 对话区：上 RAG/提示 → 中间消息框吃满剩余高度（仅框内滚）→ 下输入+按钮贴底
+ * overflow:hidden + flex-basis:0%：避免长消息按「内容高度」把整块撑高、把按钮顶下去 */
 .conversation-layout {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  flex: 0 0 auto;
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow: hidden;
   width: 100%;
   align-self: stretch;
+}
+
+.conversation-layout > .rag-toolbar-row,
+.conversation-layout > .el-alert {
+  flex-shrink: 0;
 }
 
 /* 同一行：左勾选、右知识库列（说明只在右列下方） */
@@ -377,36 +431,35 @@ body {
 }
 
 /*
- * 消息列表：固定高度，不随消息变多变高；多出来的只在框内上下滚动
- * clamp：小屏不低于 200px，大屏约 40% 视口高，上限 520px
+ * 消息列表：外层定高（min-height / max-height / height:clamp 三重约束）
+ * 内层 .messages-scroll-view 100% 高 + overflow:auto，长文只在本框滚动
  */
 .conversation-messages-grow {
   flex: 0 0 auto;
-  height: clamp(200px, 40vh, 520px);
-  max-height: clamp(200px, 40vh, 520px);
+  width: 100%;
+  min-height: var(--chat-msg-min-h);
+  max-height: var(--chat-msg-max-h);
+  height: clamp(var(--chat-msg-min-h), 40vh, var(--chat-msg-max-h));
+  height: clamp(var(--chat-msg-min-h), 36dvh, var(--chat-msg-max-h));
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
-.messages-scrollbar {
+.messages-scroll-view {
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
-}
-
-.messages-scrollbar-fill {
   height: 100%;
-  min-height: 0;
-}
-
-.messages-scrollbar-fill :deep(.el-scrollbar) {
-  height: 100%;
-}
-
-.messages-scrollbar-fill :deep(.el-scrollbar__wrap) {
-  overflow-y: auto !important;
-  max-height: none !important;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 2px 8px rgba(15, 23, 42, 0.04);
 }
 
 .card-header-row {
@@ -525,14 +578,6 @@ body {
   padding-right: 12px;
   box-sizing: border-box;
   min-height: 0;
-}
-
-.messages-scrollbar {
-  width: 100%;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 2px 8px rgba(15, 23, 42, 0.04);
 }
 
 .messages-inner {
