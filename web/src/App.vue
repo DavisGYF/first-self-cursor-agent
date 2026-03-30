@@ -18,81 +18,119 @@
       <el-card class="panel-card" shadow="hover">
         <template #header>
           <div class="card-header-row">
-            <span class="title">介助cursor搭建全栈示例（Vue + Express）</span>
+            <span class="title"
+              >cursor辅助搭建AI助手全栈示例（Vue + Express）</span
+            >
           </div>
         </template>
 
         <div class="panel-stack">
           <div class="panel-top-group">
-          <!-- 区块 1：说明 -->
-          <section class="panel-section panel-section--intro" aria-label="功能说明">
-            <el-text class="subtitle-block" type="info">
-              功能概览：多模型对话、SSE 流式输出、会话管理（本地缓存 + 服务端同步）、知识库 RAG（段落分块 / BM25
-              或可选向量）、引用来源展示、请求监控与成本估算。
-            </el-text>
-            <el-text size="small" type="info" class="subtitle-block subtitle-tight panel-intro-sub">
-              开发环境下流式请求直连后端
-              <code class="inline-code">localhost:3000</code>
-              ，避免 Vite 代理缓冲 SSE。健康检查：
-              <el-link href="http://localhost:3000/api/health" target="_blank" type="primary">/api/health</el-link>
-              （<code class="inline-code">startedAt</code> 随进程重启变化）。 最近一次部署时间<span style="color: red;">2026年03月23日16:54:54</span>
-            </el-text>
-          </section>
+            <!-- 区块 1：说明 -->
+            <section
+              class="panel-section panel-section--intro"
+              aria-label="功能说明"
+            >
+              <el-text class="subtitle-block" type="info">
+                功能概览：多模型对话、SSE 流式输出、会话管理（本地缓存 +
+                服务端同步）、知识库 RAG（段落分块 / BM25
+                或可选向量）、引用来源展示、请求监控与成本估算。
+              </el-text>
+              <el-text
+                size="small"
+                type="info"
+                class="subtitle-block subtitle-tight panel-intro-sub"
+              >
+                开发环境下流式请求直连后端
+                <code class="inline-code">localhost:3000</code>
+                ，避免 Vite 代理缓冲 SSE。健康检查：
+                <el-link
+                  href="http://localhost:3000/api/health"
+                  target="_blank"
+                  type="primary"
+                  >/api/health</el-link
+                >
+                （<code class="inline-code">startedAt</code> 随进程重启变化）。
+                最近一次部署时间<span style="color: red"
+                  >2026年03月23日16:54:54</span
+                >
+              </el-text>
+            </section>
 
-          <!-- 区块 2：模型与提示词（三项表单一体） -->
-          <section class="panel-section panel-section--settings" aria-label="模型与提示词">
-            <el-form label-position="left" label-width="100px" class="settings-form">
-              <el-row :gutter="16" class="settings-form-row">
-                <el-col :xs="24" :sm="12">
-                  <el-form-item label="大模型">
-                    <el-select
-                      v-model="selectedModel"
-                      placeholder="选择要调用的模型"
-                      filterable
-                      class="settings-form-control"
-                    >
-                      <el-option v-for="model in models" :key="model" :label="model" :value="model" />
-                    </el-select>
-                  </el-form-item>
-                </el-col>
-                <el-col :xs="24" :sm="12">
-                  <el-form-item label="场景模板">
-                    <el-select
-                      v-model="templatePickerValue"
-                      placeholder="选预设场景，一键填入下方系统提示词"
-                      class="settings-form-control"
-                      @change="applyTemplate"
-                    >
-                      <el-option
-                        v-for="item in promptTemplates"
-                        :key="item.label"
-                        :label="item.label"
-                        :value="item.value"
-                      />
-                    </el-select>
-                  </el-form-item>
-                </el-col>
-              </el-row>
+            <!-- 区块 2：模型与提示词（三项表单一体） -->
+            <section
+              class="panel-section panel-section--settings"
+              aria-label="模型与提示词"
+            >
+              <el-form
+                label-position="left"
+                label-width="100px"
+                class="settings-form"
+              >
+                <el-row :gutter="16" class="settings-form-row">
+                  <el-col :xs="24" :sm="12">
+                    <el-form-item label="大模型">
+                      <el-select
+                        v-model="selectedModel"
+                        placeholder="选择要调用的模型"
+                        filterable
+                        class="settings-form-control"
+                      >
+                        <el-option
+                          v-for="model in models"
+                          :key="model"
+                          :label="model"
+                          :value="model"
+                        />
+                      </el-select>
+                    </el-form-item>
+                  </el-col>
+                  <el-col :xs="24" :sm="12">
+                    <el-form-item label="场景模板">
+                      <el-select
+                        v-model="templatePickerValue"
+                        placeholder="选预设场景，一键填入下方系统提示词"
+                        class="settings-form-control"
+                        @change="applyTemplate"
+                      >
+                        <el-option
+                          v-for="item in promptTemplates"
+                          :key="item.label"
+                          :label="item.label"
+                          :value="item.value"
+                        />
+                      </el-select>
+                    </el-form-item>
+                  </el-col>
+                </el-row>
 
-              <el-form-item label="系统提示词" class="settings-form-item--textarea">
-                <el-input
-                  v-model="systemPrompt"
-                  type="textarea"
-                  :rows="3"
-                  placeholder="告诉模型扮演什么角色、用什么语气与格式回答"
-                  resize="vertical"
-                  class="settings-form-control"
-                />
-              </el-form-item>
-            </el-form>
-          </section>
+                <el-form-item
+                  label="系统提示词"
+                  class="settings-form-item--textarea"
+                >
+                  <el-input
+                    v-model="systemPrompt"
+                    type="textarea"
+                    :rows="3"
+                    placeholder="告诉模型扮演什么角色、用什么语气与格式回答"
+                    resize="vertical"
+                    class="settings-form-control"
+                  />
+                </el-form-item>
+              </el-form>
+            </section>
           </div>
 
           <!-- 区块 3：对话与操作（含监控等） -->
-          <section class="panel-section panel-section--conversation" aria-label="对话与操作">
+          <section
+            class="panel-section panel-section--conversation"
+            aria-label="对话与操作"
+          >
             <div class="conversation-layout">
               <div class="rag-toolbar-row">
-                <el-checkbox v-model="useRag" class="rag-toolbar-checkbox">启用 RAG（让回答参考你上传的文档）</el-checkbox>
+                <el-checkbox v-model="useRag" class="rag-toolbar-checkbox"
+                  >启用 RAG（让回答参考你上传的文档）</el-checkbox
+                >
                 <div class="rag-kb-column">
                   <div class="rag-kb-inline" aria-label="知识库文件">
                     <div class="rag-kb-inline-main">
@@ -106,7 +144,9 @@
                           @change="onRagUploadChange"
                         >
                           <template #trigger>
-                            <el-button type="primary" plain size="small">选择文件</el-button>
+                            <el-button type="primary" plain size="small"
+                              >选择文件</el-button
+                            >
                           </template>
                         </el-upload>
                         <el-button
@@ -120,38 +160,77 @@
                         </el-button>
                       </div>
                     </div>
-                    <div v-if="selectedFileName || ragStatusText" class="rag-kb-meta">
-                      <span v-if="selectedFileName" class="rag-kb-file-name" :title="selectedFileName">
+                    <div
+                      v-if="selectedFileName || ragStatusText"
+                      class="rag-kb-meta"
+                    >
+                      <span
+                        v-if="selectedFileName"
+                        class="rag-kb-file-name"
+                        :title="selectedFileName"
+                      >
                         已选：{{ selectedFileName }}
                       </span>
-                      <el-text v-if="ragStatusText" size="small" type="primary" class="rag-kb-status" tag="span">
+                      <el-text
+                        v-if="ragStatusText"
+                        size="small"
+                        type="primary"
+                        class="rag-kb-status"
+                        tag="span"
+                      >
                         {{ ragStatusText }}
                       </el-text>
                     </div>
                   </div>
                   <p class="rag-kb-hint">
-                    上传 .txt / .md 至后端知识库（持久化存储），勾选「启用 RAG」后参与检索。
+                    上传 .txt / .md 至后端知识库（持久化存储），勾选「启用
+                    RAG」后参与检索。
                   </p>
                 </div>
               </div>
 
-              <el-alert v-if="ragMatchHint" :title="ragMatchHint" type="info" show-icon :closable="false" />
+              <el-alert
+                v-if="ragMatchHint"
+                :title="ragMatchHint"
+                type="info"
+                show-icon
+                :closable="false"
+              />
 
               <!-- 对话区：min/max 高度见 style.css 变量；原生滚动，避免 el-scrollbar 在定高下高度链断裂 -->
               <div class="chat-messages-fullbleed conversation-messages-grow">
-                <div class="messages-scroll-view" tabindex="0" role="log" aria-label="对话消息">
+                <div
+                  class="messages-scroll-view"
+                  tabindex="0"
+                  role="log"
+                  aria-label="对话消息"
+                >
                   <div class="messages messages-inner">
                     <div
                       v-for="(msg, idx) in messages"
                       :key="idx"
                       class="msg"
-                      :class="msg.role === 'user' ? 'msg-user' : 'msg-assistant'"
+                      :class="
+                        msg.role === 'user' ? 'msg-user' : 'msg-assistant'
+                      "
                     >
-                      <strong>{{ msg.role === "user" ? "你：" : "AI：" }}</strong>{{ msg.content }}
-                      <div v-if="msg.role === 'assistant' && msg.sources?.length" class="source-box">
+                      <strong>{{
+                        msg.role === "user" ? "你：" : "AI："
+                      }}</strong
+                      >{{ msg.content }}
+                      <div
+                        v-if="msg.role === 'assistant' && msg.sources?.length"
+                        class="source-box"
+                      >
                         <div class="source-title">引用来源：</div>
-                        <div v-for="source in msg.sources" :key="source.id" class="source-item">
-                          <strong>{{ source.title }} #{{ source.chunkIndex }}</strong>
+                        <div
+                          v-for="source in msg.sources"
+                          :key="source.id"
+                          class="source-item"
+                        >
+                          <strong
+                            >{{ source.title }} #{{ source.chunkIndex }}</strong
+                          >
                           <span v-if="source.score != null" class="source-score"
                             >（相关度 {{ source.score.toFixed(4) }}）</span
                           >
@@ -173,16 +252,33 @@
                 />
 
                 <el-space wrap :size="8" class="conversation-actions">
-                  <el-button type="primary" :disabled="isGenerating" @click="sendMessage">发送</el-button>
-                  <el-button :disabled="!isGenerating" @click="stopGenerating">停止生成</el-button>
-                  <el-button :disabled="isGenerating" @click="runStreamDemo">流式测试</el-button>
-                  <el-button @click="toggleLogPanel">{{ showLogPanel ? "收起监控" : "请求监控" }}</el-button>
-                  <el-checkbox v-model="showStreamDebug" border>显示流式调试（页面 + 浏览器控制台 F12）</el-checkbox>
+                  <el-button
+                    type="primary"
+                    :disabled="isGenerating"
+                    @click="sendMessage"
+                    >发送</el-button
+                  >
+                  <el-button :disabled="!isGenerating" @click="stopGenerating"
+                    >停止生成</el-button
+                  >
+                  <el-button :disabled="isGenerating" @click="runStreamDemo"
+                    >流式测试</el-button
+                  >
+                  <el-button @click="toggleLogPanel">{{
+                    showLogPanel ? "收起监控" : "请求监控"
+                  }}</el-button>
+                  <el-checkbox v-model="showStreamDebug" border
+                    >显示流式调试（页面 + 浏览器控制台 F12）</el-checkbox
+                  >
                 </el-space>
               </div>
             </div>
 
-            <el-card v-if="showStreamDebug" shadow="never" class="stream-debug-card">
+            <el-card
+              v-if="showStreamDebug"
+              shadow="never"
+              class="stream-debug-card"
+            >
               <template #header>
                 <span class="source-title">流式调试（最新在上）</span>
               </template>
@@ -193,25 +289,44 @@
             <el-card v-if="showLogPanel" shadow="never" class="obs-card-wrap">
               <template #header>
                 <div class="obs-header-row">
-                  <span class="source-title">请求监控（进程内缓存，服务重启后清空）</span>
-                  <el-button size="small" type="primary" plain @click="fetchLogs">刷新</el-button>
+                  <span class="source-title"
+                    >请求监控（进程内缓存，服务重启后清空）</span
+                  >
+                  <el-button
+                    size="small"
+                    type="primary"
+                    plain
+                    @click="fetchLogs"
+                    >刷新</el-button
+                  >
                 </div>
               </template>
               <p class="obs-pitch">
-                <strong>功能说明：</strong>后端在每次对话流结束后写入结构化记录；此处展示汇总指标与最近明细，包括成功率、耗时、输出
+                <strong>功能说明：</strong
+                >后端在每次对话流结束后写入结构化记录；此处展示汇总指标与最近明细，包括成功率、耗时、输出
                 token 量、按公开价目粗算的费用，以及开启 RAG
-                时是否命中知识片段。输入 token 由请求体长度估算，费用为示意值，适用于演示、排障与容量感知，不等同于账单对账。
+                时是否命中知识片段。输入 token
+                由请求体长度估算，费用为示意值，适用于演示、排障与容量感知，不等同于账单对账。
               </p>
 
               <div v-if="logsSummary" class="obs-summary-grid">
-                <el-card v-for="(cell, i) in obsSummaryCells" :key="i" shadow="never" class="obs-stat-card">
+                <el-card
+                  v-for="(cell, i) in obsSummaryCells"
+                  :key="i"
+                  shadow="never"
+                  class="obs-stat-card"
+                >
                   <div class="obs-card-k">{{ cell.k }}</div>
                   <div class="obs-card-v">{{ cell.v }}</div>
                 </el-card>
               </div>
 
-              <el-divider content-position="left">最近明细（新在上）</el-divider>
-              <div v-if="logs.length === 0" class="source-item">暂无记录，发几条消息后点刷新</div>
+              <el-divider content-position="left"
+                >最近明细（新在上）</el-divider
+              >
+              <div v-if="logs.length === 0" class="source-item">
+                暂无记录，发几条消息后点刷新
+              </div>
               <div
                 v-for="(log, idx) in logs"
                 :key="idx"
@@ -220,15 +335,20 @@
               >
                 <span class="obs-log-time">{{ log.time?.slice(11, 19) }}</span>
                 <span class="obs-log-ok">{{ log.error ? "✗" : "✓" }}</span>
-                {{ log.elapsed }}ms
-                · 出 {{ log.outputTokens }} tok
-                · 估入 ~{{ log.estimatedPromptTokens ?? "—" }} tok
-                · ~${{ log.estimatedCostUsd ?? "—" }}
-                · {{ log.model }}
+                {{ log.elapsed }}ms · 出 {{ log.outputTokens }} tok · 估入 ~{{
+                  log.estimatedPromptTokens ?? "—"
+                }}
+                tok · ~${{ log.estimatedCostUsd ?? "—" }} · {{ log.model }}
                 <span v-if="log.useRag" class="obs-rag">
-                  [RAG{{ log.ragMatched ? "·命中" + log.ragHitCount + "段" : "·未命中" }}]
+                  [RAG{{
+                    log.ragMatched
+                      ? "·命中" + log.ragHitCount + "段"
+                      : "·未命中"
+                  }}]
                 </span>
-                <div v-if="log.error" class="obs-err-text">错误: {{ log.error }}</div>
+                <div v-if="log.error" class="obs-err-text">
+                  错误: {{ log.error }}
+                </div>
               </div>
             </el-card>
           </section>
@@ -253,7 +373,7 @@ import type {
   ServerSyncStatus,
   SessionRecord,
   SessionsBackupPayload,
-  SseDataLine
+  SseDataLine,
 } from "./types";
 import { getApiBase } from "./apiBase";
 import { fetchServerSessions, putServerSessions } from "./sessionSync";
@@ -266,9 +386,15 @@ const models = ["gpt-4o-mini", "deepseek-chat", "qwen-plus"] as const;
 // 预置 Prompt 模板，方便你快速切换业务场景
 const promptTemplates: PromptTemplate[] = [
   { label: "通用助手", value: "你是一个专业、简洁、可靠的中文 AI 助手。" },
-  { label: "短视频脚本", value: "你是短视频编导，请按钩子-正文-结尾行动号召输出。" },
-  { label: "SEO 写作", value: "你是 SEO 编辑，请输出结构化内容并兼顾可读性与关键词。" },
-  { label: "客服助手", value: "你是客服专员，语气礼貌，先共情再给解决方案。" }
+  {
+    label: "短视频脚本",
+    value: "你是短视频编导，请按钩子-正文-结尾行动号召输出。",
+  },
+  {
+    label: "SEO 写作",
+    value: "你是 SEO 编辑，请输出结构化内容并兼顾可读性与关键词。",
+  },
+  { label: "客服助手", value: "你是客服专员，语气礼貌，先共情再给解决方案。" },
 ];
 
 // 消息列表，角色分为 user / assistant
@@ -398,7 +524,10 @@ function ensureSessionOrderConsistency() {
 function saveSessionsToStorage(options: { skipServer?: boolean } = {}) {
   try {
     localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions.value));
-    localStorage.setItem(SESSION_ORDER_STORAGE_KEY, JSON.stringify(sessionSidebarOrder.value));
+    localStorage.setItem(
+      SESSION_ORDER_STORAGE_KEY,
+      JSON.stringify(sessionSidebarOrder.value),
+    );
     localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, activeSessionId.value);
   } catch (e) {
     console.warn("[会话] 写入 localStorage 失败（可能超出配额）", e);
@@ -418,7 +547,9 @@ function scheduleServerSync() {
   }, 650);
 }
 
-function normalizeServerSession(s: Partial<SessionRecord> & { id: string }): SessionRecord {
+function normalizeServerSession(
+  s: Partial<SessionRecord> & { id: string },
+): SessionRecord {
   const rawMessages = Array.isArray(s.messages) ? s.messages : [];
   return {
     id: s.id,
@@ -427,7 +558,7 @@ function normalizeServerSession(s: Partial<SessionRecord> & { id: string }): Ses
     messages: rawMessages as ChatMessage[],
     updatedAt: Number(s.updatedAt) || Date.now(),
     systemPrompt: s.systemPrompt,
-    selectedModel: s.selectedModel
+    selectedModel: s.selectedModel,
   };
 }
 
@@ -436,7 +567,7 @@ async function pushSessionsToServer() {
   try {
     await putServerSessions({
       sessions: JSON.parse(JSON.stringify(sessions.value)),
-      sessionOrder: [...sessionSidebarOrder.value]
+      sessionOrder: [...sessionSidebarOrder.value],
     });
     serverSyncStatus.value = "synced";
   } catch (e) {
@@ -481,8 +612,8 @@ async function hydrateFromServer() {
         messages: [],
         updatedAt: Date.now(),
         systemPrompt: promptTemplates[0].value,
-        selectedModel: models[0]
-      }
+        selectedModel: models[0],
+      },
     ];
     sessionSidebarOrder.value = [id];
     activeSessionId.value = id;
@@ -493,7 +624,8 @@ async function hydrateFromServer() {
 
   ensureSessionOrderConsistency();
   const savedActive = localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
-  const exists = savedActive && sessions.value.some((s) => s.id === savedActive);
+  const exists =
+    savedActive && sessions.value.some((s) => s.id === savedActive);
   activeSessionId.value = exists ? savedActive : sessions.value[0].id;
   applySessionToUI(activeSessionId.value);
 
@@ -522,7 +654,7 @@ function persistCurrentSession() {
     title,
     updatedAt: Date.now(),
     systemPrompt: systemPrompt.value,
-    selectedModel: selectedModel.value
+    selectedModel: selectedModel.value,
   };
   saveSessionsToStorage();
 }
@@ -552,9 +684,12 @@ function createNewSession() {
     messages: [],
     updatedAt: Date.now(),
     systemPrompt: systemPrompt.value,
-    selectedModel: selectedModel.value
+    selectedModel: selectedModel.value,
   });
-  sessionSidebarOrder.value = [id, ...sessionSidebarOrder.value.filter((x) => x !== id)];
+  sessionSidebarOrder.value = [
+    id,
+    ...sessionSidebarOrder.value.filter((x) => x !== id),
+  ];
   activeSessionId.value = id;
   messages.value = [];
   ragMatchHint.value = "";
@@ -590,14 +725,17 @@ function deleteSession(id: string) {
 
 // 侧栏重命名：锁定标题，避免随后 persist 用首条用户消息顶掉
 function onRenameSession({ id, title }: { id: string; title: string }) {
-  const t = String(title || "").trim().slice(0, 60) || "新会话";
+  const t =
+    String(title || "")
+      .trim()
+      .slice(0, 60) || "新会话";
   const idx = sessions.value.findIndex((s) => s.id === id);
   if (idx === -1) return;
   sessions.value[idx] = {
     ...sessions.value[idx],
     title: t,
     titleLocked: true,
-    updatedAt: Date.now()
+    updatedAt: Date.now(),
   };
   saveSessionsToStorage();
 }
@@ -620,9 +758,11 @@ function exportSessionsBackup() {
     exportedAt: new Date().toISOString(),
     sessions: sessions.value,
     sessionOrder: sessionSidebarOrder.value,
-    activeSessionId: activeSessionId.value
+    activeSessionId: activeSessionId.value,
   };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json",
+  });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = `ai-copilot-sessions-${Date.now()}.json`;
@@ -640,11 +780,15 @@ async function importSessionsBackup(file: File | undefined) {
       ElMessage.error("文件里没有有效的 sessions 数组");
       return;
     }
-    await ElMessageBox.confirm("将用备份替换当前所有会话与顺序，确定吗？", "提示", {
-      confirmButtonText: "确定",
-      cancelButtonText: "取消",
-      type: "warning"
-    });
+    await ElMessageBox.confirm(
+      "将用备份替换当前所有会话与顺序，确定吗？",
+      "提示",
+      {
+        confirmButtonText: "确定",
+        cancelButtonText: "取消",
+        type: "warning",
+      },
+    );
     sessions.value = data.sessions;
     sessionSidebarOrder.value = Array.isArray(data.sessionOrder)
       ? data.sessionOrder.filter((id) => typeof id === "string")
@@ -687,7 +831,7 @@ const obsSummaryCells = computed(() => {
     { k: "平均耗时", v: `${s.avgElapsedMs} ms` },
     { k: "累计输出 token", v: String(s.totalOutputTokens) },
     { k: "粗算总成本 USD", v: `~${s.totalEstimatedCostUsd}` },
-    { k: "RAG 请求 / 命中资料", v: ragLine }
+    { k: "RAG 请求 / 命中资料", v: ragLine },
   ];
 });
 
@@ -720,7 +864,7 @@ function appendStreamToken(assistantIndex: number, token: string) {
   if (!msg || msg.role !== "assistant") return;
   list.splice(assistantIndex, 1, {
     ...msg,
-    content: (msg.content || "") + token
+    content: (msg.content || "") + token,
   });
 }
 
@@ -780,8 +924,8 @@ async function uploadRagFile() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title: selectedFile.value.name,
-        content
-      })
+        content,
+      }),
     });
     const data = await response.json();
     if (!response.ok) {
@@ -823,16 +967,18 @@ async function sendMessage() {
         model: selectedModel.value,
         systemPrompt: systemPrompt.value,
         useRag: useRag.value,
-        messages: messages.value.filter((m) => m.role === "user" || m.role === "assistant")
+        messages: messages.value.filter(
+          (m) => m.role === "user" || m.role === "assistant",
+        ),
       }),
-      signal: currentAbortController.signal
+      signal: currentAbortController.signal,
     });
 
     if (!response.ok || !response.body) {
       const m = messages.value[assistantIndex];
       messages.value.splice(assistantIndex, 1, {
         ...m,
-        content: "请求失败，请检查后端日志或 API Key。"
+        content: "请求失败，请检查后端日志或 API Key。",
       });
       pushStreamDebug(`[chat] 请求失败 status=${response.status}`);
       return;
@@ -852,14 +998,16 @@ async function sendMessage() {
       const { value, done } = await reader.read();
       if (done) {
         pushStreamDebug(
-          `[chat] read 结束：${chatReadCount} 次 chunk，${chatBytes} 字节，约 ${chatTokens} 个 token 片段`
+          `[chat] read 结束：${chatReadCount} 次 chunk，${chatBytes} 字节，约 ${chatTokens} 个 token 片段`,
         );
         break;
       }
       chatReadCount += 1;
       chatBytes += value?.byteLength ?? 0;
       if (chatReadCount <= 5) {
-        pushStreamDebug(`[chat] 第 ${chatReadCount} 次 read，${value?.byteLength ?? 0} 字节`);
+        pushStreamDebug(
+          `[chat] 第 ${chatReadCount} 次 read，${value?.byteLength ?? 0} 字节`,
+        );
       }
 
       buffer += decoder.decode(value, { stream: true });
@@ -893,10 +1041,11 @@ async function sendMessage() {
           // error 事件显示错误信息
           if (event.type === "error") {
             const m = messages.value[assistantIndex];
-            const errMsg = typeof event.message === "string" ? event.message : "";
+            const errMsg =
+              typeof event.message === "string" ? event.message : "";
             messages.value.splice(assistantIndex, 1, {
               ...m,
-              content: (m.content || "") + `\n[错误] ${errMsg}`
+              content: (m.content || "") + `\n[错误] ${errMsg}`,
             });
           }
         } catch {
@@ -909,9 +1058,15 @@ async function sendMessage() {
     const m = messages.value[idx];
     if (!m) return;
     if (String(error).includes("AbortError")) {
-      messages.value.splice(idx, 1, { ...m, content: (m.content || "") + "\n[已停止生成]" });
+      messages.value.splice(idx, 1, {
+        ...m,
+        content: (m.content || "") + "\n[已停止生成]",
+      });
     } else {
-      messages.value.splice(idx, 1, { ...m, content: (m.content || "") + `\n[请求异常] ${String(error)}` });
+      messages.value.splice(idx, 1, {
+        ...m,
+        content: (m.content || "") + `\n[请求异常] ${String(error)}`,
+      });
     }
   } finally {
     isGenerating.value = false;
@@ -944,7 +1099,9 @@ async function runStreamDemo() {
 
   const url = `${getApiBase()}/api/stream-demo`;
   pushStreamDebug(`[demo] 准备请求 GET ${url}`);
-  pushStreamDebug(`[demo] getApiBase=${JSON.stringify(getApiBase())} import.meta.env.DEV=${import.meta.env.DEV}`);
+  pushStreamDebug(
+    `[demo] getApiBase=${JSON.stringify(getApiBase())} import.meta.env.DEV=${import.meta.env.DEV}`,
+  );
 
   let readCount = 0;
   let totalBytes = 0;
@@ -952,11 +1109,16 @@ async function runStreamDemo() {
 
   try {
     const res = await fetch(url);
-    pushStreamDebug(`[demo] fetch 已返回 status=${res.status} ok=${res.ok} body=${!!res.body}`);
+    pushStreamDebug(
+      `[demo] fetch 已返回 status=${res.status} ok=${res.ok} body=${!!res.body}`,
+    );
     if (!res.ok || !res.body) {
       const m = messages.value[assistantIndex];
       if (m) {
-        messages.value.splice(assistantIndex, 1, { ...m, content: "流式测试请求失败" });
+        messages.value.splice(assistantIndex, 1, {
+          ...m,
+          content: "流式测试请求失败",
+        });
       }
       pushStreamDebug(`[demo] 中止：无 body 或状态非 2xx`);
       return;
@@ -968,11 +1130,11 @@ async function runStreamDemo() {
       const { value, done } = await reader.read();
       if (done) {
         pushStreamDebug(
-          `[demo] read 结束：共 ${readCount} 次 chunk，${totalBytes} 字节，解析 token ${tokenCount} 个`
+          `[demo] read 结束：共 ${readCount} 次 chunk，${totalBytes} 字节，解析 token ${tokenCount} 个`,
         );
         if (readCount === 1 && tokenCount > 5) {
           pushStreamDebug(
-            "[demo] 提示：若 chunk 只有 1 次但 token 很多，说明浏览器/网络把流攒成了一大块（仍可能逐字显示，看 nextTick）"
+            "[demo] 提示：若 chunk 只有 1 次但 token 很多，说明浏览器/网络把流攒成了一大块（仍可能逐字显示，看 nextTick）",
           );
         }
         break;
@@ -995,7 +1157,9 @@ async function runStreamDemo() {
           if (event.type === "token" && event.token) {
             tokenCount += 1;
             if (tokenCount <= 5) {
-              pushStreamDebug(`[demo] token #${tokenCount} ${JSON.stringify(event.token)}`);
+              pushStreamDebug(
+                `[demo] token #${tokenCount} ${JSON.stringify(event.token)}`,
+              );
             }
             appendStreamToken(assistantIndex, event.token);
           }
@@ -1010,7 +1174,10 @@ async function runStreamDemo() {
   } catch (e) {
     const m = messages.value[assistantIndex];
     if (m) {
-      messages.value.splice(assistantIndex, 1, { ...m, content: `流式测试异常：${String(e)}` });
+      messages.value.splice(assistantIndex, 1, {
+        ...m,
+        content: `流式测试异常：${String(e)}`,
+      });
     }
     pushStreamDebug(`[demo] catch: ${String(e)}`);
   } finally {
