@@ -19,7 +19,7 @@
         <template #header>
           <div class="card-header-row">
             <span class="title"
-              >cursor辅助搭建AI助手全栈示例（Vue + Express）</span
+              >cursor辅助搭建的AI助手全栈示例平台（Vue + Express）</span
             >
           </div>
         </template>
